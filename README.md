@@ -52,5 +52,5 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 [issue-tracker]: https://github.com/nitzanlab/biolord/issues
 [changelog]: https://biolord.readthedocs.io/latest/changelog.html
 [link-docs]: https://biolord.readthedocs.io
-[link-api]: https://biolord.readthedocs.io/latest/api.html
+[link-api]: https://biolord.readthedocs.io/en/latest/api.html
 [email]: mailto::zoe.piran@mail.huji.ac.il

@@ -45,7 +45,7 @@ templates_path = ["_templates"]
 info = metadata("biolord")
 project_name = info["Name"]
 author = info["Author"]
-copyright = f"{datetime.now():%Y}, {author}."
+copyright = f"{datetime.now():%Y}, {author}"
 version = info["Version"]
 release = info["Version"]
 
