@@ -25,7 +25,7 @@ dependencies = [
     "rich",
     "scvi-tools",
     "torch",
-    "sklearn",
+    "scikit-learn",
 ]
 
 [project.optional-dependencies]
