@@ -1,0 +1,135 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[project]
+name = "biolord"
+version = "0.0.1"
+description = "A deep generative framework for disentangling known and unknown attributes in single-cell data."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Zoe Piran"},
+]
+maintainers = [
+    {name = "Zoe Piran", email = "zoe.piran@mail.huji.ac.il"},
+]
+urls.Documentation = "https://biolord.readthedocs.io/"
+urls.Source = "https://github.com/nitzanlab/biolord"
+urls.Home-page = "https://github.com/nitzanlab/biolord"
+dependencies = [
+    "anndata",
+    # for debug logging (referenced from the issue template)
+    "session-info",
+    "rich",
+    "scvi-tools",
+    "torch",
+    "sklearn",
+]
+
+[project.optional-dependencies]
+dev = [
+    # CLI for bumping the version number
+    "bump2version",
+    "pre-commit",
+    "twine>=4.0.2"
+]
+doc = [
+    "sphinx>=5",
+    "sphinx-book-theme>=1.0.0",
+    "myst-nb",
+    "sphinxcontrib-bibtex>=1.0.0",
+    "sphinx-autodoc-typehints",
+    "ipython",
+    "sphinx-copybutton",
+]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.coverage.run]
+source = ["biolord"]
+omit = [
+    "**/test_*.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+xfail_strict = true
+addopts = [
+    "--import-mode=importlib",  # allow using test files with same name
+]
+
+[tool.black]
+line-length = 120
+target-version = ["py38"]
+
+[tool.ruff]
+src = ["src"]
+line-length = 120
+target-version = "py38"
+select = [
+    "F",  # Errors detected by Pyflakes
+    "E",  # Error detected by Pycodestyle
+    "W",  # Warning detected by Pycodestyle
+    "I",  # isort
+    "D",  # pydocstyle
+    "B",  # flake8-bugbear
+    "TID",  # flake8-tidy-imports
+    "C4",  # flake8-comprehensions
+    "BLE",  # flake8-blind-except
+    "UP",  # pyupgrade
+    "RUF100",  # Report unused noqa directives
+]
+ignore = [
+    # line too long -> we accept long comment lines; black gets rid of long code lines
+    "E501",
+    # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
+    "E731",
+    # allow I, O, l as variable names -> I is the identity matrix
+    "E741",
+    # Missing docstring in public package
+    "D104",
+    # Missing docstring in public module
+    "D100",
+    # Missing docstring in __init__
+    "D107",
+    # Errors from function calls in argument defaults. These are fine when the result is immutable.
+    "B008",
+    # __magic__ methods are are often self-explanatory, allow missing docstrings
+    "D105",
+    # first line should end with a period [Bug: doesn't work with single-line docstrings]
+    "D400",
+    # First line should be in imperative mood; try rephrasing
+    "D401",
+    ## Disable one in each pair of mutually incompatible rules
+    # We don’t want a blank line before a class docstring
+    "D203",
+    # We want docstrings to start immediately after the opening triple quote
+    "D213",
+    # Do not use mutable data structures for argument defaults
+    "B006"
+]
+
+[tool.ruff.per-file-ignores]
+"docs/*" = ["I"]
+"tests/*" = ["D"]
+"*/__init__.py" = ["F401"]
+
+[tool.jupytext]
+formats = "ipynb,md"
+
+[tool.cruft]
+skip = [
+    "tests",
+    "src/**/__init__.py",
+    "src/**/basic.py",
+    "docs/api.md",
+    "docs/changelog.md",
+    "docs/references.bib",
+    "docs/references.md",
+    "docs/tutorials/biolord_classify.ipynb",
+    "docs/tutorials/biolord_pipeline.ipynb"
+]
