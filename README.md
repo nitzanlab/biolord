@@ -13,6 +13,8 @@ We assume partial supervision over known attributes (categorical or ordered) alo
 Given the partial supervision [biolord][link-api] finds a decomposed latent space, and provides a generative model to
 obtain single-cell measurements for different cell states.
 
+For more details read the [preprint][link-preprint].
+
 ![The biolord pipeline][badge-pipeline]
 
 [badge-pipeline]: https://user-images.githubusercontent.com/43661890/222221567-09111a1a-8837-4bc5-8f71-15b596571c69.png?raw=true
@@ -47,10 +49,20 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 
 ## Citation
 
-> t.b.a
+```
+@article{piran2023biological,
+  title={Biological representation disentanglement of single-cell data},
+  author={Piran, Zoe and Cohen, Niv and Hoshen, Yedid and Nitzan, Mor},
+  journal={bioRxiv},
+  pages={2023--03},
+  year={2023},
+  publisher={Cold Spring Harbor Laboratory}
+}
+```
 
 [issue-tracker]: https://github.com/nitzanlab/biolord/issues
 [changelog]: https://biolord.readthedocs.io/latest/changelog.html
 [link-docs]: https://biolord.readthedocs.io
 [link-api]: https://biolord.readthedocs.io/en/latest/api.html
+[link-preprint]: https://www.biorxiv.org/content/10.1101/2023.03.05.531195v1
 [email]: mailto::zoe.piran@mail.huji.ac.il
