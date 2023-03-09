@@ -1,0 +1,21 @@
+diff a/docs/_templates/autosummary/class.rst b/docs/_templates/autosummary/class.rst	(rejected hunks)
+@@ -39,9 +39,6 @@ Attributes
+ 
+ {% for item in attributes %}
+ 
+-{{ item }}
+-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-
+ .. autoattribute:: {{ [objname, item] | join(".") }}
+ {%- endfor %}
+ 
+@@ -56,9 +53,6 @@ Methods
+ {% for item in methods %}
+ {%- if item != '__init__' %}
+ 
+-{{ item }}
+-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-
+ .. automethod:: {{ [objname, item] | join(".") }}
+ {%- endif -%}
+ {%- endfor %}
