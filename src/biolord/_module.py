@@ -203,8 +203,8 @@ class BiolordModule(BaseModuleClass):
                     dropout_rate=self.attribute_dropout_rate[attribute_],
                     bias=False,
                 )
-            for attribute_ in reps_ordered:
-                self.ordered_networks[attribute_] = self.ordered_networks[attribute_.split("_rep")[0]]
+        for attribute_ in reps_ordered:
+            self.ordered_networks[attribute_] = self.ordered_networks[attribute_.split("_rep")[0]]
 
         # 2. categorical classes
         self.categorical_embeddings = nn.ModuleDict()
