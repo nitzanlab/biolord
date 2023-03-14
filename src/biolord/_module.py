@@ -205,11 +205,16 @@ class BiolordModule(BaseModuleClass):
 
         # 2. categorical classes
         self.categorical_embeddings = nn.ModuleDict()
+        reps = []
         for attribute_, unique_categories in self.categorical_attributes_map.items():
+            if "rep" in attribute_:
+                reps.append(attribute_)
             self.categorical_embeddings[attribute_] = torch.nn.Embedding(
                 len(unique_categories),
                 n_latent_attribute_categorical,
             )
+        for attribute_ in reps:
+            self.categorical_embeddings[attribute_] = self.categorical_embeddings[attribute_.split("_")[0]]
 
         # Decoder components
         if self.loss_ae == "nb":
