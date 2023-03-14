@@ -189,9 +189,13 @@ class BiolordModule(BaseModuleClass):
 
         # Create Embeddings
         # 1. ordered classes
-        self.ordered_networks = nn.ModuleDict(
-            {
-                attribute_: FCLayers(
+        reps_ordered = []
+        self.ordered_networks = nn.ModuleDict()
+        for attribute_, len_ in self.ordered_attributes_map.items():
+            if "_rep" in attribute_:
+                reps_ordered.append(attribute_)
+            else:
+                self.ordered_networks[attribute_] = FCLayers(
                     n_in=len_,
                     n_out=self.n_latent_attribute_ordered,
                     n_layers=self.attribute_nn_depth[attribute_],
@@ -199,22 +203,22 @@ class BiolordModule(BaseModuleClass):
                     dropout_rate=self.attribute_dropout_rate[attribute_],
                     bias=False,
                 )
-                for attribute_, len_ in self.ordered_attributes_map.items()
-            }
-        )
+            for attribute_ in reps_ordered:
+                self.ordered_networks[attribute_] = self.ordered_networks[attribute_.split("_rep")[0]]
 
         # 2. categorical classes
         self.categorical_embeddings = nn.ModuleDict()
-        reps = []
+        reps_categorical = []
         for attribute_, unique_categories in self.categorical_attributes_map.items():
-            if "rep" in attribute_:
-                reps.append(attribute_)
-            self.categorical_embeddings[attribute_] = torch.nn.Embedding(
-                len(unique_categories),
-                n_latent_attribute_categorical,
-            )
-        for attribute_ in reps:
-            self.categorical_embeddings[attribute_] = self.categorical_embeddings[attribute_.split("_")[0]]
+            if "_rep" in attribute_:
+                reps_categorical.append(attribute_)
+            else:
+                self.categorical_embeddings[attribute_] = torch.nn.Embedding(
+                    len(unique_categories),
+                    n_latent_attribute_categorical,
+                )
+        for attribute_ in reps_categorical:
+            self.categorical_embeddings[attribute_] = self.categorical_embeddings[attribute_.split("_rep")[0]]
 
         # Decoder components
         if self.loss_ae == "nb":
