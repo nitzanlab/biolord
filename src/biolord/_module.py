@@ -116,6 +116,9 @@ class BiolordModule(BaseModuleClass):
         attribute_dropout_rate: Dict[str, float] = None,
         autoencoder_width: int = 512,
         autoencoder_depth: int = 4,
+        decoder_width: int = 512,
+        decoder_depth: int = 4,
+        decoder_activation: bool = True,
         attribute_nn_width: Dict[str, int] = None,
         attribute_nn_depth: Dict[str, int] = None,
         eval_r2_ordered: bool = False,
@@ -225,8 +228,8 @@ class BiolordModule(BaseModuleClass):
             self.decoder = DecoderSCVI(
                 n_input=self.n_decoder_input,
                 n_output=n_genes,
-                n_hidden=autoencoder_width,
-                n_layers=autoencoder_depth,
+                n_hidden=decoder_width,
+                n_layers=decoder_depth,
                 use_batch_norm=use_batch_norm,
                 use_layer_norm=use_layer_norm,
                 scale_activation="softmax",
@@ -236,10 +239,11 @@ class BiolordModule(BaseModuleClass):
             self.decoder = Decoder(
                 n_input=self.n_decoder_input,
                 n_output=n_genes,
-                n_hidden=autoencoder_width,
-                n_layers=autoencoder_depth,
+                n_hidden=decoder_width,
+                n_layers=decoder_depth,
                 use_batch_norm=use_batch_norm,
                 use_layer_norm=use_layer_norm,
+                use_activation=decoder_activation,
             )
 
     def _get_inference_input(self, tensors: Dict[Any, Any], **kwargs):

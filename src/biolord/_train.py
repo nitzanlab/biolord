@@ -22,6 +22,8 @@ class biolordTrainingPlan(TrainingPlan):
         checkpoint_freq: int = 20,
         autoencoder_lr=1e-4,
         autoencoder_wd=1e-4,
+        decoder_lr=1e-4,
+        decoder_wd=1e-4,
         step_size_lr: int = 45,
         batch_size: int = 256,
         cosine_scheduler: bool = False,
@@ -59,6 +61,9 @@ class biolordTrainingPlan(TrainingPlan):
             self.attribute_nn_wd = {attribute_: attribute_nn_wd for attribute_ in self.module.ordered_networks}
 
         self.n_epochs_warmup = n_epochs_warmup if n_epochs_warmup is not None else 0
+
+        self.decoder_wd = decoder_wd
+        self.decoder_lr = decoder_lr
 
         self.autoencoder_wd = autoencoder_wd
         self.autoencoder_lr = autoencoder_lr
@@ -125,8 +130,8 @@ class biolordTrainingPlan(TrainingPlan):
                                 self.module.decoder.parameters(),
                             )
                         ),
-                        "lr": self.autoencoder_lr,
-                        "weight_decay": self.autoencoder_wd,
+                        "lr": self.decoder_lr,
+                        "weight_decay": self.decoder_wd,
                     }
                 ]
             )
