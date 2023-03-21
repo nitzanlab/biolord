@@ -713,7 +713,7 @@ class Biolord(BaseModelClass):
             use_gpu=use_gpu,
             early_stopping_monitor=monitor,
             early_stopping_mode="max",
-            enable_checkpointing=True,
+            enable_checkpointing=enable_checkpointing,
             **trainer_kwargs,
         )
 
