@@ -88,7 +88,7 @@ class BiolordModule(BaseModuleClass):
         Ordered attributes autoencoder layers' width.
     attribute_nn_depth
         Ordered attributes autoencoder number of layers.
-    attribute_activation
+    attribute_nn_activation
         Use activation in ordered attributes.
     decoder_width
         Decoder layers' width.
@@ -129,7 +129,7 @@ class BiolordModule(BaseModuleClass):
         decoder_activation: bool = True,
         attribute_nn_width: Dict[str, int] = None,
         attribute_nn_depth: Dict[str, int] = None,
-        attribute_activation: bool = True,
+        attribute_nn_activation: bool = True,
         eval_r2_ordered: bool = False,
         decoder_dropout_rate: float = 0.1,
         seed: int = 0,
@@ -214,7 +214,7 @@ class BiolordModule(BaseModuleClass):
                     n_hidden=self.attribute_nn_width[attribute_],
                     dropout_rate=self.attribute_dropout_rate[attribute_],
                     bias=False,
-                    use_activation=attribute_activation,
+                    use_activation=attribute_nn_activation,
                 )
         for attribute_ in reps_ordered:
             self.ordered_networks[attribute_] = self.ordered_networks[attribute_.split("_rep")[0]]
