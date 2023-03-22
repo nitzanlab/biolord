@@ -24,13 +24,18 @@ class RegularizedEmbedding(nn.Module):
         n_input: int,
         n_output: int,
         sigma: float,
+        mask_zero: bool = False,
     ):
         super().__init__()
-        self.embedding = nn.Embedding(
-            num_embeddings=n_input,
-            embedding_dim=n_output,
-        )
-        self.sigma = sigma
+        if mask_zero:
+            self.embedding = lambda x: torch.zeros(n_output)
+        else:
+            self.embedding = nn.Embedding(
+                num_embeddings=n_input,
+                embedding_dim=n_output,
+            )
+        self.sigma = 0 if mask_zero else sigma
+        self.mask_zero = mask_zero
 
     def forward(self, x):
         """Forward pass."""
@@ -78,6 +83,8 @@ class BiolordModule(BaseModuleClass):
         Use layer norm in layers.
     unknown_attribute_noise_param
         Noise strength added to encoding of unknown attributes.
+    unknown_attributes
+        Whether to include learning for unknown attributes
     attribute_dropout_rate
         Dropout rate.
     autoencoder_width
@@ -121,6 +128,7 @@ class BiolordModule(BaseModuleClass):
         use_batch_norm: bool = True,
         use_layer_norm: bool = False,
         unknown_attribute_noise_param: float = 1e-1,
+        unknown_attributes: bool = True,
         attribute_dropout_rate: Dict[str, float] = None,
         autoencoder_width: int = 512,
         autoencoder_depth: int = 4,
@@ -196,7 +204,7 @@ class BiolordModule(BaseModuleClass):
             }
 
         self.latent_codes = RegularizedEmbedding(
-            n_input=n_samples, n_output=n_latent, sigma=unknown_attribute_noise_param
+            n_input=n_samples, n_output=n_latent, sigma=unknown_attribute_noise_param, mask_zero=unknown_attributes
         )
 
         # Create Embeddings
