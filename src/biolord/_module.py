@@ -33,7 +33,7 @@ class RegularizedEmbedding(nn.Module):
                 embedding_dim=n_output,
             )
         else:
-            self.embedding = lambda x: torch.zeros(n_output)
+            self.embedding = lambda x: torch.zeros((x.shape[0], n_output))
 
         self.sigma = sigma if embed else 0
         self.embed = embed
