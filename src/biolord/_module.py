@@ -27,14 +27,10 @@ class RegularizedEmbedding(nn.Module):
         embed: bool = True,
     ):
         super().__init__()
-        if embed:
-            self.embedding = nn.Embedding(
-                num_embeddings=n_input,
-                embedding_dim=n_output,
-            )
-        else:
-            self.embedding = lambda x: torch.zeros((x.shape[0], n_output))
-
+        self.embedding = nn.Embedding(
+            num_embeddings=n_input,
+            embedding_dim=n_output,
+        )
         self.sigma = sigma if embed else 0
         self.embed = embed
 
@@ -46,7 +42,7 @@ class RegularizedEmbedding(nn.Module):
             noise.normal_(mean=0, std=self.sigma)
 
             x_ = x_ + noise
-
+        x_ = x_ * self.embed
         return x_
 
 
