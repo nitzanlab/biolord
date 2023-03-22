@@ -24,18 +24,19 @@ class RegularizedEmbedding(nn.Module):
         n_input: int,
         n_output: int,
         sigma: float,
-        mask_zero: bool = False,
+        embed: bool = True,
     ):
         super().__init__()
-        if mask_zero:
-            self.embedding = lambda x: torch.zeros(n_output)
-        else:
+        if embed:
             self.embedding = nn.Embedding(
                 num_embeddings=n_input,
                 embedding_dim=n_output,
             )
-        self.sigma = 0 if mask_zero else sigma
-        self.mask_zero = mask_zero
+        else:
+            self.embedding = lambda x: torch.zeros(n_output)
+
+        self.sigma = sigma if embed else 0
+        self.embed = embed
 
     def forward(self, x):
         """Forward pass."""
@@ -204,7 +205,7 @@ class BiolordModule(BaseModuleClass):
             }
 
         self.latent_codes = RegularizedEmbedding(
-            n_input=n_samples, n_output=n_latent, sigma=unknown_attribute_noise_param, mask_zero=unknown_attributes
+            n_input=n_samples, n_output=n_latent, sigma=unknown_attribute_noise_param, embed=unknown_attributes
         )
 
         # Create Embeddings
