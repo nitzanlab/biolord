@@ -20,8 +20,8 @@ class biolordTrainingPlan(TrainingPlan):
         n_epochs_kl_warmup: Union[int, None] = None,
         n_epochs_warmup: Union[int, None] = None,
         checkpoint_freq: int = 20,
-        autoencoder_lr=1e-4,
-        autoencoder_wd=1e-4,
+        latent_lr=1e-4,
+        latent_wd=1e-4,
         decoder_lr=1e-4,
         decoder_wd=1e-4,
         step_size_lr: int = 45,
@@ -34,8 +34,8 @@ class biolordTrainingPlan(TrainingPlan):
     ):
         super().__init__(
             module=module,
-            lr=autoencoder_lr,
-            weight_decay=autoencoder_wd,
+            lr=latent_lr,
+            weight_decay=latent_wd,
             n_steps_kl_warmup=n_steps_kl_warmup,
             n_epochs_kl_warmup=n_epochs_kl_warmup,
             reduce_lr_on_plateau=False,
@@ -49,14 +49,14 @@ class biolordTrainingPlan(TrainingPlan):
         if isinstance(attribute_nn_lr, Dict):
             self.attribute_nn_lr = attribute_nn_lr
         elif attribute_nn_lr is None:
-            self.attribute_nn_lr = {attribute_: self.autoencoder_lr for attribute_ in self.module.ordered_networks}
+            self.attribute_nn_lr = {attribute_: self.latent_lr for attribute_ in self.module.ordered_networks}
         else:
             self.attribute_nn_lr = {attribute_: attribute_nn_lr for attribute_ in self.module.ordered_networks}
 
         if isinstance(attribute_nn_wd, Dict):
             self.attribute_nn_wd = attribute_nn_wd
         elif attribute_nn_wd is None:
-            self.attribute_nn_wd = {attribute_: self.autoencoder_wd for attribute_ in self.module.ordered_networks}
+            self.attribute_nn_wd = {attribute_: self.latent_wd for attribute_ in self.module.ordered_networks}
         else:
             self.attribute_nn_wd = {attribute_: attribute_nn_wd for attribute_ in self.module.ordered_networks}
 
@@ -65,8 +65,8 @@ class biolordTrainingPlan(TrainingPlan):
         self.decoder_wd = decoder_wd
         self.decoder_lr = decoder_lr
 
-        self.autoencoder_wd = autoencoder_wd
-        self.autoencoder_lr = autoencoder_lr
+        self.latent_wd = latent_wd
+        self.latent_lr = latent_lr
 
         self.checkpoint_freq = checkpoint_freq
 
@@ -112,8 +112,8 @@ class biolordTrainingPlan(TrainingPlan):
                                 self.module.latent_codes.parameters(),
                             )
                         ),
-                        "lr": self.autoencoder_lr,
-                        "weight_decay": self.autoencoder_wd,
+                        "lr": self.latent_lr,
+                        "weight_decay": self.latent_wd,
                         # betas=(0.5, 0.999),
                     }
                 ]
@@ -147,8 +147,8 @@ class biolordTrainingPlan(TrainingPlan):
                                 self.module.categorical_embeddings.parameters(),
                             )
                         ),
-                        "lr": self.autoencoder_lr,
-                        "weight_decay": self.autoencoder_wd,
+                        "lr": self.latent_lr,
+                        "weight_decay": self.latent_wd,
                     }
                 ]
             )
@@ -316,8 +316,8 @@ class biolordClassifyTrainingPlan(biolordTrainingPlan):
                                     classifier_.parameters(),
                                 )
                             ),
-                            "lr": self.autoencoder_lr,
-                            "weight_decay": self.autoencoder_wd,
+                            "lr": self.latent_lr,
+                            "weight_decay": self.latent_wd,
                             # betas=(0.5, 0.999),
                         }
                     ]
@@ -335,8 +335,8 @@ class biolordClassifyTrainingPlan(biolordTrainingPlan):
                                     regressor_.parameters(),
                                 )
                             ),
-                            "lr": self.autoencoder_lr,
-                            "weight_decay": self.autoencoder_wd,
+                            "lr": self.latent_lr,
+                            "weight_decay": self.latent_wd,
                             # betas=(0.5, 0.999),
                         }
                     ]

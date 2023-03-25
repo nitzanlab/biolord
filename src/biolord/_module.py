@@ -72,8 +72,6 @@ class BiolordModule(BaseModuleClass):
         Autoencoder loss.
     reconstruction_penalty
         MSE error to reconstruction loss.
-    loss_ordered_attribute
-        Autoencoder loss.
     use_batch_norm
         Use batch norm in layers.
     use_layer_norm
@@ -84,10 +82,6 @@ class BiolordModule(BaseModuleClass):
         Whether to include learning for unknown attributes
     attribute_dropout_rate
         Dropout rate.
-    autoencoder_width
-        Autoencoder layers' width.
-    autoencoder_depth
-        Autoencoder number of layers.
     attribute_nn_width
         Ordered attributes autoencoder layers' width.
     attribute_nn_depth
@@ -121,14 +115,11 @@ class BiolordModule(BaseModuleClass):
         loss_ae: Literal["gauss", "nb"] = "gauss",
         reconstruction_penalty: float = 1e2,
         unknown_attribute_penalty: float = 1e1,
-        loss_ordered_attribute: Literal["gauss", "mse"] = "gauss",
         use_batch_norm: bool = True,
         use_layer_norm: bool = False,
         unknown_attribute_noise_param: float = 1e-1,
         unknown_attributes: bool = True,
         attribute_dropout_rate: Dict[str, float] = None,
-        autoencoder_width: int = 512,
-        autoencoder_depth: int = 4,
         decoder_width: int = 512,
         decoder_depth: int = 4,
         decoder_activation: bool = True,
@@ -140,10 +131,11 @@ class BiolordModule(BaseModuleClass):
         seed: int = 0,
     ):
         super().__init__()
-        loss_ae, loss_ordered_attribute = loss_ae.lower(), loss_ordered_attribute.lower()
+        loss_ae = loss_ae.lower()
         assert loss_ae in ["gauss", "nb"], loss_ae
-        assert loss_ordered_attribute in ["gauss", "mse"], loss_ordered_attribute
 
+        default_width = 256
+        default_depth = 2
         torch.manual_seed(seed)
         np.random.seed(seed)
         settings.seed = seed
@@ -152,7 +144,6 @@ class BiolordModule(BaseModuleClass):
         self.ae_loss_mse_fn = nn.MSELoss()
         self.reconstruction_penalty = reconstruction_penalty
         self.unknown_attribute_penalty = unknown_attribute_penalty
-        self.regression_loss_fn = nn.MSELoss() if loss_ordered_attribute == "mse" else nn.GaussianNLLLoss()
         self.mm_regression_loss_fn = nn.BCEWithLogitsLoss()
 
         self.n_genes = n_genes
@@ -161,7 +152,6 @@ class BiolordModule(BaseModuleClass):
         self.n_latent_attribute_categorical = n_latent_attribute_categorical
         self.n_latent_attribute_ordered = n_latent_attribute_ordered
         self.loss_ae = loss_ae
-        self.loss_ordered_class = loss_ordered_attribute
         self.use_batch_norm = use_batch_norm
         self.use_layer_norm = use_layer_norm
         self.eval_r2_ordered = eval_r2_ordered
@@ -178,14 +168,14 @@ class BiolordModule(BaseModuleClass):
         if isinstance(attribute_nn_width, Dict):
             self.attribute_nn_width = attribute_nn_width
         elif attribute_nn_width is None:
-            self.attribute_nn_width = {attribute_: autoencoder_width for attribute_ in self.ordered_attributes_map}
+            self.attribute_nn_width = {attribute_: default_width for attribute_ in self.ordered_attributes_map}
         else:
             self.attribute_nn_width = {attribute_: attribute_nn_width for attribute_ in self.ordered_attributes_map}
 
         if isinstance(attribute_nn_depth, Dict):
             self.attribute_nn_depth = attribute_nn_depth
         elif attribute_nn_depth is None:
-            self.attribute_nn_depth = {attribute_: autoencoder_depth for attribute_ in self.ordered_attributes_map}
+            self.attribute_nn_depth = {attribute_: default_depth for attribute_ in self.ordered_attributes_map}
         else:
             self.attribute_nn_depth = {attribute_: attribute_nn_depth for attribute_ in self.ordered_attributes_map}
 
@@ -634,6 +624,7 @@ class BiolordClassifyModule(BiolordModule):
         Classifier's number of layers.
     classifier_dropout_rate
         Classifier's dropout rate.
+    regression_loss_fn
     kwargs
         Keyword arguments for :class:`~biolord.BiolordModule`.
     """
@@ -649,16 +640,21 @@ class BiolordClassifyModule(BiolordModule):
         classifier_nn_width: int = 128,
         classifier_nn_depth: int = 2,
         classifier_dropout_rate: float = 1e-1,
+        regression_loss_fn: Literal["gauss", "mse"] = "gauss",
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
+
+        regression_loss_fn = regression_loss_fn.lower()
+        assert regression_loss_fn in ["gauss", "mse"], regression_loss_fn
 
         self.ae_loss_fn = nn.GaussianNLLLoss()
         self.ae_loss_mse_fn = nn.MSELoss()
         self.classification_penalty = classification_penalty
         self.classifier_penalty = classifier_penalty
         self.classification_loss_fn = nn.CrossEntropyLoss()
-        self.regression_loss_fn = nn.MSELoss() if self.loss_ordered_class == "mse" else nn.GaussianNLLLoss()
+        self.regression_loss_fn = nn.MSELoss() if regression_loss_fn == "mse" else nn.GaussianNLLLoss()
+        self.regression_loss = "mse"
         self.mm_regression_loss_fn = nn.BCEWithLogitsLoss()
         self.classify_all = classify_all
 
@@ -690,7 +686,7 @@ class BiolordClassifyModule(BiolordModule):
         # Create classifiers
         self.ordered_regressors = nn.ModuleDict()
         if self.classify_all:
-            if self.loss_ordered_class == "mse":
+            if regression_loss_fn == "mse":
                 self.ordered_regressors = nn.ModuleDict(
                     {
                         attribute_: nn.Linear(
@@ -707,8 +703,8 @@ class BiolordClassifyModule(BiolordModule):
                         attribute_: Decoder(
                             n_input=self.n_genes,
                             n_output=len_,
-                            n_hidden=self.autoencoder_width,
-                            n_layers=self.autoencoder_depth,
+                            n_hidden=classifier_nn_width,
+                            n_layers=classifier_nn_depth,
                             use_batch_norm=self.use_batch_norm,
                             use_layer_norm=self.use_layer_norm,
                         )
@@ -827,7 +823,7 @@ class BiolordClassifyModule(BiolordModule):
         for attribute_, len_ in self.ordered_attributes_map.items():
             if attribute_ in classification:
                 if len_ > 1:
-                    if self.loss_ordered_class == "mse":
+                    if self.regression_loss == "mse":
                         classification_loss += self.regression_loss_fn(
                             classification[attribute_], tensors[attribute_].float()
                         ) + self.classification_penalty * self.mm_regression_loss_fn(
@@ -911,7 +907,7 @@ class BiolordClassifyModule(BiolordModule):
 
         for attribute_ in self.ordered_regressors:
             attribute_vals_pred = (
-                classification[attribute_] if self.loss_ordered_class == "mse" else classification[attribute_][0]
+                classification[attribute_] if self.regression_loss == "mse" else classification[attribute_][0]
             )
             attribute_vals = tensors[attribute_].cpu().numpy()
             attribute_vals_pred = (

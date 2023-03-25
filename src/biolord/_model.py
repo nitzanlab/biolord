@@ -50,7 +50,7 @@ class Biolord(BaseModelClass):
         Hyperparameters for the model's module initialization, e.g, :class:`~biolord.BiolordModule` or
         :class:`~biolord.BiolordClassifyModule`.
     n_latent
-        Number of latent dimensions used for the autoencoder.
+        Number of latent dimensions used for the latent embedding.
     train_classifiers
         Whether to activate a :class:`~biolord.BiolordClassifyModule`.
     split_key

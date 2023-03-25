@@ -21,7 +21,7 @@ def test_biolord():
         adata=adata,
         n_latent=n_latent,
     )
-    model.train(10, check_val_every_n_epoch=1, train_size=0.5)
+    model.train(10, check_val_every_n_epoch=1, train_size=0.5, enable_checkpointing=False)
 
     # tests __repr__
     print(model)
