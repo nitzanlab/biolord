@@ -624,7 +624,8 @@ class BiolordClassifyModule(BiolordModule):
         Classifier's number of layers.
     classifier_dropout_rate
         Classifier's dropout rate.
-    regression_loss_fn
+    loss_regression
+        Loss function for regressors
     kwargs
         Keyword arguments for :class:`~biolord.BiolordModule`.
     """
@@ -640,21 +641,21 @@ class BiolordClassifyModule(BiolordModule):
         classifier_nn_width: int = 128,
         classifier_nn_depth: int = 2,
         classifier_dropout_rate: float = 1e-1,
-        regression_loss_fn: Literal["gauss", "mse"] = "gauss",
+        loss_regression: Literal["gauss", "mse"] = "gauss",
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
 
-        regression_loss_fn = regression_loss_fn.lower()
-        assert regression_loss_fn in ["gauss", "mse"], regression_loss_fn
+        loss_regression = loss_regression.lower()
+        assert loss_regression in ["gauss", "mse"], loss_regression
 
         self.ae_loss_fn = nn.GaussianNLLLoss()
         self.ae_loss_mse_fn = nn.MSELoss()
         self.classification_penalty = classification_penalty
         self.classifier_penalty = classifier_penalty
         self.classification_loss_fn = nn.CrossEntropyLoss()
-        self.regression_loss_fn = nn.MSELoss() if regression_loss_fn == "mse" else nn.GaussianNLLLoss()
-        self.regression_loss = "mse"
+        self.regression_loss_fn = nn.MSELoss() if loss_regression == "mse" else nn.GaussianNLLLoss()
+        self.loss_regression = "mse"
         self.mm_regression_loss_fn = nn.BCEWithLogitsLoss()
         self.classify_all = classify_all
 
@@ -686,7 +687,7 @@ class BiolordClassifyModule(BiolordModule):
         # Create classifiers
         self.ordered_regressors = nn.ModuleDict()
         if self.classify_all:
-            if regression_loss_fn == "mse":
+            if self.loss_regression == "mse":
                 self.ordered_regressors = nn.ModuleDict(
                     {
                         attribute_: nn.Linear(
@@ -823,7 +824,7 @@ class BiolordClassifyModule(BiolordModule):
         for attribute_, len_ in self.ordered_attributes_map.items():
             if attribute_ in classification:
                 if len_ > 1:
-                    if self.regression_loss == "mse":
+                    if self.loss_regression == "mse":
                         classification_loss += self.regression_loss_fn(
                             classification[attribute_], tensors[attribute_].float()
                         ) + self.classification_penalty * self.mm_regression_loss_fn(
