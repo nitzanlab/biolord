@@ -1,0 +1,10 @@
+diff a/.github/workflows/test.yaml b/.github/workflows/test.yaml	(rejected hunks)
+@@ -56,7 +50,4 @@ jobs:
+               run: |
+                   pytest -v --cov --color=yes
+             - name: Upload coverage
+-              env:
+-                  CODECOV_NAME: ${{ matrix.python }}-${{ matrix.os }}
+-              run: |
+-                  codecov --required --flags=unittests
++              uses: codecov/codecov-action@v3

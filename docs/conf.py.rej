@@ -1,26 +1,18 @@
 diff a/docs/conf.py b/docs/conf.py	(rejected hunks)
-@@ -65,7 +65,7 @@ napoleon_numpy_docstring = True
- napoleon_include_init_with_doc = False
- napoleon_use_rtype = True  # having a separate entry generally helps readability
- napoleon_use_param = True
--myst_heading_anchors = 3  # create anchors for h1-h3
-+myst_heading_anchors = 6  # create anchors for h1-h6
- myst_enable_extensions = [
-     "amsmath",
-     "colon_fence",
-@@ -87,6 +87,7 @@ source_suffix = {
- }
+@@ -16,12 +16,15 @@ sys.path.insert(0, str(HERE / "extensions"))
  
- intersphinx_mapping = {
-+    "python": ("https://docs.python.org/3", None),
-     "anndata": ("https://anndata.readthedocs.io/en/stable/", None),
-     "numpy": ("https://numpy.org/doc/stable/", None),
- }
-@@ -109,6 +110,7 @@ html_title = project_name
- html_theme_options = {
-     "repository_url": repository_url,
-     "use_repository_button": True,
-+    "path_to_docs": "docs/",
- }
+ # -- Project information -----------------------------------------------------
  
- pygments_style = "default"
++# NOTE: If you installed your project in editable mode, this might be stale.
++#       If this is the case, reinstall it to refresh the metadata
+ info = metadata("biolord")
+ project_name = info["Name"]
+ author = info["Author"]
+ copyright = f"{datetime.now():%Y}, {author}."
+ version = info["Version"]
+-repository_url = f"https://github.com/zoepiran/{project_name}"
++urls = dict(pu.split(", ") for pu in info.get_all("Project-URL"))
++repository_url = urls["Source"]
+ 
+ # The full version, including alpha/beta/rc tags
+ release = info["Version"]
