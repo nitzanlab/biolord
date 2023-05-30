@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 import numpy as np
 import torch
 from scvi import REGISTRY_KEYS, settings
-from scvi.distributions import NegativeBinomial
+from scvi.distributions import NegativeBinomial, Poisson
 from scvi.module import Classifier
 from scvi.module.base import BaseModuleClass, auto_move_data
 from scvi.nn import Decoder, DecoderSCVI, FCLayers
@@ -68,8 +68,8 @@ class BiolordModule(BaseModuleClass):
         Latent dimension of ordered attributes.
     n_latent_attribute_categorical
         Latent dimension of categorical attributes.
-    loss_ae
-        Autoencoder loss.
+    gene_likelihood
+        The gene_likelihood model.
     reconstruction_penalty
         MSE error to reconstruction loss.
     use_batch_norm
@@ -112,7 +112,7 @@ class BiolordModule(BaseModuleClass):
         n_latent: int = 32,
         n_latent_attribute_categorical: int = 4,
         n_latent_attribute_ordered: int = 16,
-        loss_ae: Literal["gauss", "nb"] = "gauss",
+        gene_likelihood: Literal["normal", "nb", "poisson"] = "normal",
         reconstruction_penalty: float = 1e2,
         unknown_attribute_penalty: float = 1e1,
         use_batch_norm: bool = True,
@@ -131,8 +131,8 @@ class BiolordModule(BaseModuleClass):
         seed: int = 0,
     ):
         super().__init__()
-        loss_ae = loss_ae.lower()
-        assert loss_ae in ["gauss", "nb"], loss_ae
+        gene_likelihood = gene_likelihood.lower()
+        assert gene_likelihood in ["normal", "nb", "poisson"], gene_likelihood
 
         default_width = 256
         default_depth = 2
@@ -151,7 +151,7 @@ class BiolordModule(BaseModuleClass):
         self.x_loc = x_loc
         self.n_latent_attribute_categorical = n_latent_attribute_categorical
         self.n_latent_attribute_ordered = n_latent_attribute_ordered
-        self.loss_ae = loss_ae
+        self.gene_likelihood = gene_likelihood
         self.use_batch_norm = use_batch_norm
         self.use_layer_norm = use_layer_norm
         self.eval_r2_ordered = eval_r2_ordered
@@ -229,7 +229,7 @@ class BiolordModule(BaseModuleClass):
             self.categorical_embeddings[attribute_] = self.categorical_embeddings[attribute_.split("_rep")[0]]
 
         # Decoder components
-        if self.loss_ae == "nb":
+        if self.gene_likelihood in ["nb", "poisson"]:
             self.decoder = DecoderSCVI(
                 n_input=self.n_decoder_input,
                 n_output=n_genes,
@@ -321,14 +321,12 @@ class BiolordModule(BaseModuleClass):
 
     def _get_latent_unknown_attributes(
         self,
-        genes,
         sample_indices,
     ):
         """Get the module's latent unknown attributes representation."""
         latent_unknown_attributes = self.latent_codes(sample_indices)
-        unknown_attributes_distribution = 0
 
-        return latent_unknown_attributes, unknown_attributes_distribution
+        return latent_unknown_attributes
 
     @auto_move_data
     def inference(
@@ -361,14 +359,9 @@ class BiolordModule(BaseModuleClass):
         nullify_attribute = [] if nullify_attribute is None else nullify_attribute
         inference_output = {}
         x_ = genes
-        library = None
-        if self.loss_ae == "nb":
-            library = torch.log(genes.sum(1)).unsqueeze(1)
-            x_ = torch.log(1 + x_)
+        library = torch.log(genes.sum(1)).unsqueeze(1)
 
-        latent_unknown_attributes, unknown_attributes_distribution = self._get_latent_unknown_attributes(
-            genes=x_, sample_indices=sample_indices
-        )
+        latent_unknown_attributes = self._get_latent_unknown_attributes(sample_indices=sample_indices)
 
         latent_classes = self._inference_attribute_embeddings(
             genes=x_,
@@ -386,7 +379,6 @@ class BiolordModule(BaseModuleClass):
 
         inference_output["latent"] = latent
         inference_output["latent_unknown_attributes"] = latent_unknown_attributes
-        inference_output["unknown_attributes_distribution"] = unknown_attributes_distribution
         inference_output["library"] = library
 
         return inference_output
@@ -417,14 +409,18 @@ class BiolordModule(BaseModuleClass):
         -------
         Dictionary with the generative predictions of the expression distribution.
         """
-        if self.loss_ae == "nb":
+        if self.gene_likelihood in ["nb", "poisson"]:
             px_scale, _, px_rate, _ = self.decoder(
                 dispersion="gene",
                 z=latent,
                 library=library,
             )
             px_r = torch.exp(self.px_r)
-            px = NegativeBinomial(mu=px_rate, theta=px_r, scale=px_scale)
+            px = (
+                NegativeBinomial(mu=px_rate, theta=px_r, scale=px_scale)
+                if self.gene_likelihood == "nb"
+                else Poisson(px_rate)
+            )  # , scale=px_scale)
 
             return {
                 "means": px.mean,
@@ -432,6 +428,7 @@ class BiolordModule(BaseModuleClass):
                 "distribution": px,
                 "samples": px.sample().squeeze(0),
             }
+
         else:
             p_m, p_v = self.decoder(x=latent)
             px = Normal(loc=p_m, scale=p_v.sqrt())
@@ -466,8 +463,8 @@ class BiolordModule(BaseModuleClass):
         """
         x_ = tensors[self.x_loc]
 
-        if self.loss_ae == "nb":
-            reconstruction_loss = -generative_outputs["distribution"].log_prob(x_).mean(-1)
+        if self.gene_likelihood in ["nb", "poisson"]:
+            reconstruction_loss = -generative_outputs["distribution"].log_prob(x_).sum(-1)
             reconstruction_loss = reconstruction_loss.mean()
         else:
             means = generative_outputs["means"]
@@ -559,7 +556,9 @@ class BiolordModule(BaseModuleClass):
 
                 true_var_index = np.nanvar(x_index, axis=0)
                 pred_var_index = (
-                    np.nanvar(means_index, axis=0) if self.loss_ae == "nb" else np.nanmean(variances_index, axis=0)
+                    np.nanvar(means_index, axis=0)
+                    if self.gene_likelihood in ["nb", "poisson"]
+                    else np.nanmean(variances_index, axis=0)
                 )
 
                 r2_mean += r2_score(true_mean_index, pred_mean_index)

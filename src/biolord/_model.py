@@ -471,7 +471,7 @@ class Biolord(BaseModelClass):
     def get_ordered_attribute_embedding(
         self,
         attribute_key: str,
-        vals: Optional[Union[float, str, np.ndarray]],
+        vals: Optional[Union[float, str, np.ndarray]] = None,
     ) -> np.ndarray:
         """Compute embedding of an ordered attribute.
 
