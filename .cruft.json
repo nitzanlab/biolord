@@ -1,7 +1,7 @@
 {
   "template": "https://github.com/scverse/cookiecutter-scverse",
-  "commit": "c21b82bf134f3a0f13db7482d4fb04ca1f562d59",
-  "checkout": "main",
+  "commit": "03ef73af73ea4a927decc396232d9c2c5e958ee1",
+  "checkout": "v0.2.11",
   "context": {
     "cookiecutter": {
       "project_name": "biolord",
