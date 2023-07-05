@@ -1,3 +1,4 @@
+from . import _utils as ul
 from ._model import Biolord
 from ._module import BiolordClassifyModule, BiolordModule
 

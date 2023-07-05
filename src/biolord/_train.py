@@ -82,6 +82,8 @@ class biolordTrainingPlan(TrainingPlan):
 
         self.automatic_optimization = False
         self.iter_count = 0
+        self.training_step_outputs = []
+        self.validation_step_outputs = []
         self._epoch_keys = []
 
         self.epoch_keys = [
@@ -216,10 +218,12 @@ class biolordTrainingPlan(TrainingPlan):
             if key not in results:
                 results.update({key: 0.0})
 
+        self.training_step_outputs.append(results)
         return results
 
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self):
         """Training epoch end."""
+        outputs = self.training_step_outputs
         self.epoch_history["epoch"].append(self.current_epoch)
         self.epoch_history["mode"].append("train")
 
@@ -231,6 +235,8 @@ class biolordTrainingPlan(TrainingPlan):
             schedulers = self.lr_schedulers()
             for scheduler in schedulers:
                 scheduler.step()
+
+        self.training_step_outputs.clear()
 
     def validation_step(self, batch, batch_idx):
         """Validation step."""
@@ -246,15 +252,19 @@ class biolordTrainingPlan(TrainingPlan):
         results.update({"generative_var_accuracy": r2_var})
         results.update({"biolord_metric": biolord_metric(r2_mean, r2_var)})
 
+        self.validation_step_outputs.append(results)
         return results
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         """Validation step end."""
+        outputs = self.validation_step_outputs
         self.epoch_history["epoch"].append(self.current_epoch)
         self.epoch_history["mode"].append("valid")
         for key in self.epoch_keys:
             self.epoch_history[key].append(np.mean([output[key] for output in outputs]))
             self.log(f"val_{key}", self.epoch_history[key][-1], prog_bar=True)
+
+        self.validation_step_outputs.clear()
 
     def test_step(self, batch, batch_idx):
         """Test step."""

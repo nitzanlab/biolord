@@ -462,16 +462,16 @@ class BiolordModule(BaseModuleClass):
         The loss elements.
         """
         x_ = tensors[self.x_loc]
+        means = generative_outputs["means"]
+        variances = generative_outputs["variances"]
 
         if self.gene_likelihood in ["nb", "poisson"]:
             reconstruction_loss = -generative_outputs["distribution"].log_prob(x_).sum(-1)
             reconstruction_loss = reconstruction_loss.mean()
         else:
-            means = generative_outputs["means"]
-            variances = generative_outputs["variances"]
-            reconstruction_loss = self.ae_loss_fn(
-                input=means, target=x_, var=variances
-            ) + self.reconstruction_penalty * self.ae_loss_mse_fn(input=means, target=x_)
+            reconstruction_loss = self.ae_loss_fn(input=means, target=x_, var=variances)
+
+        reconstruction_loss += self.reconstruction_penalty * self.ae_loss_mse_fn(input=means, target=x_)
 
         unknown_attribute_penalty_loss_val = self.unknown_attribute_penalty_loss(
             inference_outputs["latent_unknown_attributes"]

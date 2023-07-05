@@ -33,7 +33,6 @@ logger = logging.getLogger(__name__)
 logger.propagate = False
 logging_dir = "./biolord_log/"
 
-
 __all__ = ["Biolord"]
 
 
@@ -891,7 +890,7 @@ class Biolord(BaseModelClass):
             for ci, _ in enumerate(target_attributes):
                 adata_preds.obs.iloc[start : start + vals_.shape[0], ci] = key_[ci]
             obs_names_tmp[start : start + vals_.shape[0]] = [
-                obs_name + "_" + key_[0] for obs_name in adata_source.obs_names
+                obs_name + "_" + "_".join([str(k) for k in key_]) for obs_name in adata_source.obs_names
             ]
             start += vals_.shape[0]
 
