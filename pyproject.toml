@@ -26,6 +26,7 @@ dependencies = [
     "scvi-tools",
     "torch",
     "scikit-learn",
+    "scanpy"
 ]
 
 [project.optional-dependencies]
