@@ -61,7 +61,7 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 ```
 
 [issue-tracker]: https://github.com/nitzanlab/biolord/issues
-[changelog]: https://biolord.readthedocs.io/latest/changelog.html
+[changelog]: https://biolord.readthedocs.io/en/latest/changelog.html
 [link-docs]: https://biolord.readthedocs.io
 [link-api]: https://biolord.readthedocs.io/en/latest/api.html
 [link-preprint]: https://www.biorxiv.org/content/10.1101/2023.03.05.531195v1
