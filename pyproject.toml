@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "biolord"
-version = "0.0.1"
+version = "0.0.2"
 description = "A deep generative framework for disentangling known and unknown attributes in single-cell data."
 readme = "README.md"
 requires-python = ">=3.8"

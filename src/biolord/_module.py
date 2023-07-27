@@ -640,13 +640,13 @@ class BiolordClassifyModule(BiolordModule):
         classifier_nn_width: int = 128,
         classifier_nn_depth: int = 2,
         classifier_dropout_rate: float = 1e-1,
-        loss_regression: Literal["gauss", "mse"] = "gauss",
+        loss_regression: Literal["normal", "mse"] = "normal",
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
 
         loss_regression = loss_regression.lower()
-        assert loss_regression in ["gauss", "mse"], loss_regression
+        assert loss_regression in ["normal", "mse"], loss_regression
 
         self.ae_loss_fn = nn.GaussianNLLLoss()
         self.ae_loss_mse_fn = nn.MSELoss()

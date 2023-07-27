@@ -19,4 +19,5 @@ references.md
 
 tutorials/biolord_pipeline
 tutorials/biolord_classify
+tutorials/biolord_omics
 ```
