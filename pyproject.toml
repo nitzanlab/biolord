@@ -20,10 +20,10 @@ urls.Source = "https://github.com/nitzanlab/biolord"
 urls.Home-page = "https://github.com/nitzanlab/biolord"
 dependencies = [
     "anndata",
-    # for debug logging (referenced from the issue template)
     "session-info",
     "rich",
     "scvi-tools",
+    "lightning>=2.0,<2.2",
     "torch",
     "scikit-learn",
     "scanpy"
