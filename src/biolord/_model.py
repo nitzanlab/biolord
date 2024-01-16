@@ -9,7 +9,7 @@ import pandas as pd
 import rich
 import torch
 from anndata import AnnData
-from pytorch_lightning.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint
 from scvi import REGISTRY_KEYS
 from scvi.data import AnnDataManager
 from scvi.data.fields import (

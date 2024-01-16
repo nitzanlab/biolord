@@ -13,11 +13,11 @@ We assume partial supervision over known attributes (categorical or ordered) alo
 Given the partial supervision [biolord][link-api] finds a decomposed latent space, and provides a generative model to
 obtain single-cell measurements for different cell states.
 
-For more details read the [preprint][link-preprint].
+For more details read our [pubication][link-paper] in _Nature Biotechnology_.
 
 ![The biolord pipeline][badge-pipeline]
 
-[badge-pipeline]: https://user-images.githubusercontent.com/43661890/222221567-09111a1a-8837-4bc5-8f71-15b596571c69.png?raw=true
+[badge-pipeline]: https://github.com/nitzanlab/biolord/assets/43661890/24192211-125e-40c8-9039-4832abefcc5b?raw=true
 
 ## Getting started
 
@@ -50,13 +50,12 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 ## Citation
 
 ```
-@article{piran2023biological,
-  title={Biological representation disentanglement of single-cell data},
+@article{piran2024disentanglement,
+  title={Disentanglement of single-cell data with biolord},
   author={Piran, Zoe and Cohen, Niv and Hoshen, Yedid and Nitzan, Mor},
-  journal={bioRxiv},
-  pages={2023--03},
-  year={2023},
-  publisher={Cold Spring Harbor Laboratory}
+  journal={Nature Biotechnology},
+  year={2024},
+  publisher={Nature Publishing Group US New York}
 }
 ```
 
@@ -64,5 +63,5 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 [changelog]: https://biolord.readthedocs.io/en/latest/changelog.html
 [link-docs]: https://biolord.readthedocs.io
 [link-api]: https://biolord.readthedocs.io/en/latest/api.html
-[link-preprint]: https://www.biorxiv.org/content/10.1101/2023.03.05.531195v1
+[link-paper]: https://doi.org/10.1038/s41587-023-02079-x
 [email]: mailto::zoe.piran@mail.huji.ac.il
