@@ -7,7 +7,7 @@ name = "biolord"
 version = "0.0.2"
 description = "A deep generative framework for disentangling known and unknown attributes in single-cell data."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">3.8"
 license = {file = "LICENSE"}
 authors = [
     {name = "Zoe Piran"},
@@ -23,7 +23,6 @@ dependencies = [
     "session-info",
     "rich",
     "scvi-tools",
-    "lightning>=2.0,<2.2",
     "torch",
     "scikit-learn",
     "scanpy"
