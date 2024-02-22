@@ -62,12 +62,15 @@ addopts = [
     "--import-mode=importlib",  # allow using test files with same name
 ]
 
-[tool.black]
-line-length = 120
-
 [tool.ruff]
-src = ["src"]
 line-length = 120
+src = ["src"]
+extend-include = ["*.ipynb"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ruff.lint]
 select = [
     "F",  # Errors detected by Pyflakes
     "E",  # Error detected by Pycodestyle
@@ -82,7 +85,7 @@ select = [
     "RUF100",  # Report unused noqa directives
 ]
 ignore = [
-    # line too long -> we accept long comment lines; black gets rid of long code lines
+    # line too long -> we accept long comment lines; formatter gets rid of long code lines
     "E501",
     # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
     "E731",
