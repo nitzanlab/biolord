@@ -81,6 +81,7 @@ select = [
     "UP",  # pyupgrade
     "RUF100",  # Report unused noqa directives
 ]
+target-version="py39"
 ignore = [
     # line too long -> we accept long comment lines; black gets rid of long code lines
     "E501",

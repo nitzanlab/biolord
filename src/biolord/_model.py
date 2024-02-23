@@ -2,7 +2,8 @@ import io
 import itertools
 import logging
 import os
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
+from typing import Any, Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -80,7 +81,7 @@ class Biolord(BaseModelClass):
         self,
         adata: AnnData,
         model_name: Optional[str] = None,
-        module_params: Dict[str, Any] = None,
+        module_params: dict[str, Any] = None,
         n_latent: int = 128,
         train_classifiers: bool = False,
         split_key: Optional[str] = None,
@@ -120,7 +121,7 @@ class Biolord(BaseModelClass):
         self.n_samples = adata.n_obs
         self.train_classifiers = train_classifiers
 
-        module_params = module_params if isinstance(module_params, Dict) else {}
+        module_params = module_params if isinstance(module_params, dict) else {}
 
         if self.train_classifiers:
             self.module = BiolordClassifyModule(
@@ -217,9 +218,9 @@ class Biolord(BaseModelClass):
     def setup_anndata(
         cls,
         adata: AnnData,
-        ordered_attributes_keys: Optional[List[str]] = None,
-        categorical_attributes_keys: Optional[List[str]] = None,
-        categorical_attributes_missing: Optional[Dict[str, str]] = None,
+        ordered_attributes_keys: Optional[list[str]] = None,
+        categorical_attributes_keys: Optional[list[str]] = None,
+        categorical_attributes_missing: Optional[dict[str, str]] = None,
         retrieval_attribute_key: Optional[str] = None,
         layer: Optional[str] = None,
         **kwargs: Any,
@@ -260,10 +261,10 @@ class Biolord(BaseModelClass):
             logger.info("Using data from `adata.X`.")
             FIELD = LayerField(registry_key="X", layer=None, is_count_data=False)
 
-        ordered_attributes_keys = ordered_attributes_keys if isinstance(ordered_attributes_keys, List) else []
+        ordered_attributes_keys = ordered_attributes_keys if isinstance(ordered_attributes_keys, list) else []
 
         categorical_attributes_keys = (
-            categorical_attributes_keys if isinstance(categorical_attributes_keys, List) else []
+            categorical_attributes_keys if isinstance(categorical_attributes_keys, list) else []
         )
 
         if categorical_attributes_missing is not None:
@@ -342,8 +343,8 @@ class Biolord(BaseModelClass):
         adata: Optional[AnnData] = None,
         indices: Optional[Sequence[int]] = None,
         batch_size: Optional[int] = 512,
-        nullify_attribute: Optional[List[str]] = None,
-    ) -> Tuple[AnnData, AnnData]:
+        nullify_attribute: Optional[list[str]] = None,
+    ) -> tuple[AnnData, AnnData]:
         """Return the unknown attributes latent space and full latent variable.
 
         Parameters
@@ -394,7 +395,7 @@ class Biolord(BaseModelClass):
         self,
         adata: Optional[AnnData] = None,
         indices: Optional[Sequence[int]] = None,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """Processes :class:`~anndata.AnnData` object into valid input tensors for the model.
 
         Parameters
@@ -420,8 +421,8 @@ class Biolord(BaseModelClass):
         adata: Optional[AnnData] = None,
         indices: Optional[Sequence[int]] = None,
         batch_size: Optional[int] = 512,
-        nullify_attribute: Optional[List[str]] = None,
-    ) -> Tuple[AnnData, AnnData]:
+        nullify_attribute: Optional[list[str]] = None,
+    ) -> tuple[AnnData, AnnData]:
         """The model's gene expression prediction for a given :class:`~anndata.AnnData` object.
 
         Parameters
@@ -569,7 +570,8 @@ class Biolord(BaseModelClass):
         cls,
         dir_path: str,
         adata: Optional[AnnData] = None,
-        use_gpu: Optional[Union[str, int, bool]] = None,
+        accelerator: str = "auto",
+        device: Union[int, list[int], str] = "auto",
         **kwargs: Any,
     ) -> "Biolord":
         """Load a saved model.
@@ -580,8 +582,12 @@ class Biolord(BaseModelClass):
             Directory where the model is saved.
         adata
             AnnData organized in the same way as data used to train model.
-        use_gpu
-            Whether to load the model on GPU.
+        accelerator
+            Supports passing different accelerator types ("cpu", "gpu", "tpu", "ipu", "hpu",
+            "mps, "auto") as well as custom accelerator instances.
+        device
+            The device to use. Can be set to a positive number (int or str), or ``"auto"``
+            for automatic selection based on the chosen accelerator.
         kwargs
             Keyword arguments for :meth:`scvi`
 
@@ -589,7 +595,7 @@ class Biolord(BaseModelClass):
         -------
         The saved model.
         """
-        model = super().load(dir_path, adata, use_gpu=use_gpu, **kwargs)
+        model = super().load(dir_path, adata, accelerator=accelerator, device=device, **kwargs)
 
         Biolord.categorical_attributes_map = model.categorical_attributes_map
         Biolord.ordered_attributes_map = model.ordered_attributes_map
@@ -605,10 +611,11 @@ class Biolord(BaseModelClass):
     def train(
         self,
         max_epochs: Optional[int] = None,
-        use_gpu: Optional[bool] = None,
+        accelerator: str = "auto",
+        device: Union[int, list[int], str] = "auto",
         train_size: float = 0.9,
         validation_size: Optional[float] = None,
-        plan_kwargs: Optional[Dict[str, Any]] = None,
+        plan_kwargs: Optional[dict[str, Any]] = None,
         batch_size: int = 128,
         early_stopping: bool = False,
         **trainer_kwargs: Any,
@@ -619,8 +626,12 @@ class Biolord(BaseModelClass):
         ----------
         max_epochs
             Maximum number of epochs for training.
-        use_gpu
-            Whether to use GPU if available.
+        accelerator
+            Supports passing different accelerator types ("cpu", "gpu", "tpu", "ipu", "hpu",
+            "mps, "auto") as well as custom accelerator instances.
+        device
+            The device to use. Can be set to a positive number (int or str), or ``"auto"``
+            for automatic selection based on the chosen accelerator.
         train_size
             Fraction of training data in the case of randomly splitting dataset to train/validation
             if :attr:`split_key` is not set in model's constructor.
@@ -677,7 +688,6 @@ class Biolord(BaseModelClass):
                 valid_indices=self.valid_indices,
                 test_indices=self.test_indices,
                 batch_size=batch_size,
-                use_gpu=use_gpu,
                 num_workers=num_workers,
             )
         else:
@@ -686,7 +696,6 @@ class Biolord(BaseModelClass):
                 train_size=train_size,
                 validation_size=validation_size,
                 batch_size=batch_size,
-                use_gpu=use_gpu,
                 num_workers=num_workers,
             )
         es = "early_stopping"
@@ -709,7 +718,8 @@ class Biolord(BaseModelClass):
             training_plan=self.training_plan,
             data_splitter=self.data_splitter,
             max_epochs=max_epochs,
-            use_gpu=use_gpu,
+            accelerator=accelerator,
+            devices=device,
             early_stopping_monitor=monitor,
             early_stopping_mode="max",
             enable_checkpointing=enable_checkpointing,
@@ -795,7 +805,7 @@ class Biolord(BaseModelClass):
         adata,
         dataset_source,
         target_attributes,
-    ) -> Tuple[Dict[Tuple[Any], Any], Any]:
+    ) -> tuple[dict[tuple[Any], Any], Any]:
         """Expression prediction over given inputs.
 
         Parameters
@@ -826,7 +836,7 @@ class Biolord(BaseModelClass):
         for attribute_ in target_attributes:
             categories_index = pd.Index(adata.obs[attribute_].values, dtype="category")
             classes_dataset[attribute_] = {}
-            for key_, _ in tqdm(zip(*np.unique(categories_index.values, return_counts=True))):
+            for key_, _ in tqdm(zip(*np.unique(categories_index.values, return_counts=True), strict=True)):
                 bool_category = categories_index.get_loc(key_)
 
                 adata_cur = adata[bool_category, :].copy()
@@ -852,8 +862,8 @@ class Biolord(BaseModelClass):
         self,
         adata: AnnData,
         adata_source: AnnData,
-        target_attributes: List[str],
-        add_attributes: Optional[List[str]] = None,
+        target_attributes: list[str],
+        add_attributes: Optional[list[str]] = None,
     ) -> AnnData:
         """Expression prediction over given inputs.
 

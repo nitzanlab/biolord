@@ -1,4 +1,4 @@
-from typing import Dict, List, Union
+from typing import Optional
 
 import numpy as np
 import torch
@@ -16,9 +16,9 @@ class biolordTrainingPlan(TrainingPlan):
     def __init__(
         self,
         module: BiolordModule,
-        n_steps_kl_warmup: Union[int, None] = None,
-        n_epochs_kl_warmup: Union[int, None] = None,
-        n_epochs_warmup: Union[int, None] = None,
+        n_steps_kl_warmup: Optional[int] = None,
+        n_epochs_kl_warmup: Optional[int] = None,
+        n_epochs_warmup: Optional[int] = None,
         checkpoint_freq: int = 20,
         latent_lr=1e-4,
         latent_wd=1e-4,
@@ -29,8 +29,8 @@ class biolordTrainingPlan(TrainingPlan):
         cosine_scheduler: bool = False,
         scheduler_max_epochs: int = 1000,
         scheduler_final_lr: float = 1e-5,
-        attribute_nn_lr: Dict[str, float] = None,
-        attribute_nn_wd: Dict[str, float] = None,
+        attribute_nn_lr: dict[str, float] = None,
+        attribute_nn_wd: dict[str, float] = None,
     ):
         super().__init__(
             module=module,
@@ -46,14 +46,14 @@ class biolordTrainingPlan(TrainingPlan):
             lr_min=None,
         )
 
-        if isinstance(attribute_nn_lr, Dict):
+        if isinstance(attribute_nn_lr, dict):
             self.attribute_nn_lr = attribute_nn_lr
         elif attribute_nn_lr is None:
             self.attribute_nn_lr = {attribute_: self.latent_lr for attribute_ in self.module.ordered_networks}
         else:
             self.attribute_nn_lr = {attribute_: attribute_nn_lr for attribute_ in self.module.ordered_networks}
 
-        if isinstance(attribute_nn_wd, Dict):
+        if isinstance(attribute_nn_wd, dict):
             self.attribute_nn_wd = attribute_nn_wd
         elif attribute_nn_wd is None:
             self.attribute_nn_wd = {attribute_: self.latent_wd for attribute_ in self.module.ordered_networks}
@@ -184,7 +184,7 @@ class biolordTrainingPlan(TrainingPlan):
         return self._epoch_keys
 
     @epoch_keys.setter
-    def epoch_keys(self, epoch_keys: List):
+    def epoch_keys(self, epoch_keys: list):
         self._epoch_keys.extend(epoch_keys)
 
     def training_step(self, batch):
@@ -284,7 +284,7 @@ class biolordClassifyTrainingPlan(biolordTrainingPlan):
 
     def __init__(
         self,
-        classifier_wd: float = 1e-7,
+        classifier_wd: float = 1e-4,
         classifier_lr: float = 1e-4,
         **kwargs,
     ):

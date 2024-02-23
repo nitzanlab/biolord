@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Literal, Optional
 
 import numpy as np
 import torch
@@ -107,8 +107,8 @@ class BiolordModule(BaseModuleClass):
         n_genes: int,
         n_samples: int,
         x_loc: str,
-        ordered_attributes_map: Optional[Dict[str, int]] = None,
-        categorical_attributes_map: Optional[Dict[str, Dict]] = None,
+        ordered_attributes_map: Optional[dict[str, int]] = None,
+        categorical_attributes_map: Optional[dict[str, dict]] = None,
         n_latent: int = 32,
         n_latent_attribute_categorical: int = 4,
         n_latent_attribute_ordered: int = 16,
@@ -119,12 +119,12 @@ class BiolordModule(BaseModuleClass):
         use_layer_norm: bool = False,
         unknown_attribute_noise_param: float = 1e-1,
         unknown_attributes: bool = True,
-        attribute_dropout_rate: Dict[str, float] = None,
+        attribute_dropout_rate: dict[str, float] = None,
         decoder_width: int = 512,
         decoder_depth: int = 4,
         decoder_activation: bool = True,
-        attribute_nn_width: Dict[str, int] = None,
-        attribute_nn_depth: Dict[str, int] = None,
+        attribute_nn_width: dict[str, int] = None,
+        attribute_nn_depth: dict[str, int] = None,
         attribute_nn_activation: bool = True,
         eval_r2_ordered: bool = False,
         decoder_dropout_rate: float = 0.1,
@@ -161,25 +161,25 @@ class BiolordModule(BaseModuleClass):
             + n_latent_attribute_ordered * len(ordered_attributes_map)
         )
         self.categorical_attributes_map = (
-            categorical_attributes_map if isinstance(categorical_attributes_map, Dict) else {}
+            categorical_attributes_map if isinstance(categorical_attributes_map, dict) else {}
         )
-        self.ordered_attributes_map = ordered_attributes_map if isinstance(ordered_attributes_map, Dict) else {}
+        self.ordered_attributes_map = ordered_attributes_map if isinstance(ordered_attributes_map, dict) else {}
 
-        if isinstance(attribute_nn_width, Dict):
+        if isinstance(attribute_nn_width, dict):
             self.attribute_nn_width = attribute_nn_width
         elif attribute_nn_width is None:
             self.attribute_nn_width = {attribute_: default_width for attribute_ in self.ordered_attributes_map}
         else:
             self.attribute_nn_width = {attribute_: attribute_nn_width for attribute_ in self.ordered_attributes_map}
 
-        if isinstance(attribute_nn_depth, Dict):
+        if isinstance(attribute_nn_depth, dict):
             self.attribute_nn_depth = attribute_nn_depth
         elif attribute_nn_depth is None:
             self.attribute_nn_depth = {attribute_: default_depth for attribute_ in self.ordered_attributes_map}
         else:
             self.attribute_nn_depth = {attribute_: attribute_nn_depth for attribute_ in self.ordered_attributes_map}
 
-        if isinstance(attribute_dropout_rate, Dict):
+        if isinstance(attribute_dropout_rate, dict):
             self.attribute_dropout_rate = attribute_dropout_rate
         elif attribute_dropout_rate is None:
             self.attribute_dropout_rate = {
@@ -251,7 +251,7 @@ class BiolordModule(BaseModuleClass):
                 use_activation=decoder_activation,
             )
 
-    def _get_inference_input(self, tensors: Dict[Any, Any], **kwargs):
+    def _get_inference_input(self, tensors: dict[Any, Any], **kwargs):
         x = tensors[self.x_loc]  # batch_size, n_genes
         sample_indices = tensors[REGISTRY_KEYS.INDICES_KEY].long().ravel()
 
@@ -273,7 +273,7 @@ class BiolordModule(BaseModuleClass):
         }
         return input_dict
 
-    def get_inference_input(self, tensors: Dict[Any, Any], **kwargs) -> Dict[str, Any]:
+    def get_inference_input(self, tensors: dict[Any, Any], **kwargs) -> dict[str, Any]:
         """Convert tensors to valid inference input.
 
         Parameters
@@ -333,10 +333,10 @@ class BiolordModule(BaseModuleClass):
         self,
         genes: torch.Tensor,
         sample_indices: torch.Tensor,
-        categorical_attribute_dict: Dict[Any, Any],
-        ordered_attribute_dict: Dict[Any, Any],
-        nullify_attribute: Optional[List] = None,
-    ) -> Dict[str, Any]:
+        categorical_attribute_dict: dict[Any, Any],
+        ordered_attribute_dict: dict[Any, Any],
+        nullify_attribute: Optional[list] = None,
+    ) -> dict[str, Any]:
         """Apply module inference.
 
         Parameters
@@ -395,7 +395,7 @@ class BiolordModule(BaseModuleClass):
         self,
         latent: torch.Tensor,
         library: torch.Tensor = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Runs the generative step.
 
         Parameters
@@ -442,10 +442,10 @@ class BiolordModule(BaseModuleClass):
     @auto_move_data
     def loss(
         self,
-        tensors: Dict[str, torch.Tensor],
-        inference_outputs: Dict[Literal["latent_unknown_attributes"], torch.Tensor],
-        generative_outputs: Dict[Literal["distribution", "means", "variances"], torch.Tensor],
-    ) -> Dict[str, float]:
+        tensors: dict[str, torch.Tensor],
+        inference_outputs: dict[Literal["latent_unknown_attributes"], torch.Tensor],
+        generative_outputs: dict[Literal["distribution", "means", "variances"], torch.Tensor],
+    ) -> dict[str, float]:
         """Computes the module's loss.
 
         Parameters
@@ -490,9 +490,9 @@ class BiolordModule(BaseModuleClass):
     @torch.no_grad()
     def r2_metric(
         self,
-        tensors: Dict[str, torch.Tensor],
-        generative_outputs: Dict[str, torch.Tensor],
-    ) -> Tuple[float, float]:
+        tensors: dict[str, torch.Tensor],
+        generative_outputs: dict[str, torch.Tensor],
+    ) -> tuple[float, float]:
         """Evaluate the :math:`R^2` metric over gene expression.
 
         Parameters
@@ -573,8 +573,8 @@ class BiolordModule(BaseModuleClass):
 
     @torch.no_grad()
     def get_expression(
-        self, tensors: Dict[str, torch.Tensor], **inference_kwargs: Any
-    ) -> Tuple[torch.tensor, torch.tensor]:
+        self, tensors: dict[str, torch.Tensor], **inference_kwargs: Any
+    ) -> tuple[torch.tensor, torch.tensor]:
         """Computes gene expression means and standard deviation.
 
         Parameters
@@ -631,7 +631,7 @@ class BiolordClassifyModule(BiolordModule):
 
     def __init__(
         self,
-        categorical_attributes_missing: Optional[Dict[str, str]] = None,
+        categorical_attributes_missing: Optional[dict[str, str]] = None,
         classify_all: bool = False,
         logits: bool = False,
         bias: bool = True,
@@ -648,17 +648,15 @@ class BiolordClassifyModule(BiolordModule):
         loss_regression = loss_regression.lower()
         assert loss_regression in ["normal", "mse"], loss_regression
 
-        self.ae_loss_fn = nn.GaussianNLLLoss()
-        self.ae_loss_mse_fn = nn.MSELoss()
         self.classification_penalty = classification_penalty
         self.classifier_penalty = classifier_penalty
         self.classification_loss_fn = nn.CrossEntropyLoss()
         self.regression_loss_fn = nn.MSELoss() if loss_regression == "mse" else nn.GaussianNLLLoss()
-        self.loss_regression = "mse"
+        self.loss_regression = loss_regression
         self.mm_regression_loss_fn = nn.BCEWithLogitsLoss()
         self.classify_all = classify_all
 
-        if isinstance(categorical_attributes_missing, Dict):
+        if isinstance(categorical_attributes_missing, dict):
             self.categorical_attributes_missing = categorical_attributes_missing
         elif categorical_attributes_missing is None:
             self.categorical_attributes_missing = {attribute_: None for attribute_ in self.categorical_attributes_map}
@@ -733,7 +731,7 @@ class BiolordClassifyModule(BiolordModule):
                     logits=logits,
                 )
 
-    def _get_inference_input(self, tensors: Dict, **kwargs):
+    def _get_inference_input(self, tensors: dict, **kwargs):
         x = tensors[self.x_loc]  # batch_size, n_genes
         sample_indices = tensors[REGISTRY_KEYS.INDICES_KEY].long().ravel()
 
@@ -764,7 +762,7 @@ class BiolordClassifyModule(BiolordModule):
     def classify(
         self,
         genes: torch.Tensor,
-    ) -> Dict[str, torch.Tensor]:
+    ) -> dict[str, torch.Tensor]:
         """Run classification.
 
         Parameters
@@ -787,7 +785,7 @@ class BiolordClassifyModule(BiolordModule):
         return classification
 
     @auto_move_data
-    def _classification_loss(self, tensors: Dict[str, torch.Tensor]):
+    def _classification_loss(self, tensors: dict[str, torch.Tensor]):
         """Get module classification loss."""
         x = tensors[self.x_loc]  # batch_size, n_genes
 
@@ -847,10 +845,10 @@ class BiolordClassifyModule(BiolordModule):
     @auto_move_data
     def loss(
         self,
-        tensors: Dict[str, torch.Tensor],
-        inference_outputs: Dict[Literal["latent_unknown_attributes"], torch.Tensor],
-        generative_outputs: Dict[Literal["distribution", "means", "variances"], torch.Tensor],
-    ) -> Dict[str, float]:
+        tensors: dict[str, torch.Tensor],
+        inference_outputs: dict[Literal["latent_unknown_attributes"], torch.Tensor],
+        generative_outputs: dict[Literal["distribution", "means", "variances"], torch.Tensor],
+    ) -> dict[str, float]:
         """Compute the loss.
 
         Parameters
