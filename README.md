@@ -54,6 +54,7 @@ If you found a bug, please use the [issue tracker][issue-tracker].
   title={Disentanglement of single-cell data with biolord},
   author={Piran, Zoe and Cohen, Niv and Hoshen, Yedid and Nitzan, Mor},
   journal={Nature Biotechnology},
+  pages={1--6},
   year={2024},
   publisher={Nature Publishing Group US New York}
 }
