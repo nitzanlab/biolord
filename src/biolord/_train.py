@@ -116,7 +116,6 @@ class biolordTrainingPlan(TrainingPlan):
                         ),
                         "lr": self.latent_lr,
                         "weight_decay": self.latent_wd,
-                        # betas=(0.5, 0.999),
                     }
                 ]
             )
@@ -165,7 +164,6 @@ class biolordTrainingPlan(TrainingPlan):
                             "params": params_class,
                             "lr": self.attribute_nn_lr[attribute_],
                             "weight_decay": self.attribute_nn_wd[attribute_],
-                            # betas=(0.5, 0.999),
                         }
                     ]
                 )
