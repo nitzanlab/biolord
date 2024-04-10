@@ -223,6 +223,7 @@ class Biolord(BaseModelClass):
         categorical_attributes_missing: Optional[dict[str, str]] = None,
         retrieval_attribute_key: Optional[str] = None,
         layer: Optional[str] = None,
+        multi_layer: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
         """Setup function.
@@ -241,6 +242,8 @@ class Biolord(BaseModelClass):
             Valid :attr:`anndata.AnnData.obs` key for an attribute to evaluate retrieval performance over.
         layer
             Expression layer in :attr:`anndata.AnnData.layers` to use. If :obj:`None`, use :attr:`anndata.AnnData.X`.
+        multi_layer
+            Additional expression layer in :attr:`anndata.AnnData.layers` to use. If :obj:`None`, use :attr:`anndata.AnnData.X`.
         kwargs
             Keyword arguments for :meth:`~scvi.data.AnnDataManager.register_fields`.
 
@@ -260,6 +263,24 @@ class Biolord(BaseModelClass):
         else:
             logger.info("Using data from `adata.X`.")
             FIELD = LayerField(registry_key="X", layer=None, is_count_data=False)
+
+        if multi_layer is not None:
+            # validata obs
+            if multi_layer in adata.obsm:
+                logger.info(f"Using multi data from adata.obsm[{multi_layer!r}]")
+                MULTI_FIELD = ObsmField(
+                    multi_layer,
+                    multi_layer,
+                    is_count_data=False,
+                    correct_data_format=True,
+                )
+            elif multi_layer in adata.layers:
+                logger.info(f"Using multi data from adata.layers[{multi_layer!r}]")
+                MULTI_FIELD = LayerField(registry_key="layers", layer=multi_layer, is_count_data=False)
+            else:
+                raise KeyError(f"class {multi_layer} not found in `adata.layers` or `adata.obsm`.")
+        else:
+            MULTI_FIELD = None
 
         ordered_attributes_keys = ordered_attributes_keys if isinstance(ordered_attributes_keys, list) else []
 
@@ -297,10 +318,8 @@ class Biolord(BaseModelClass):
         setup_method_args = cls._get_setup_method_args(**locals())
         adata.obs["_indices"] = np.arange(adata.n_obs)
         anndata_fields = (
-            [
-                FIELD,
-                NumericalObsField(REGISTRY_KEYS.INDICES_KEY, "_indices"),
-            ]
+            [FIELD]
+            + [NumericalObsField(REGISTRY_KEYS.INDICES_KEY, "_indices")]
             + [
                 CategoricalObsField(registry_key=attribute_, attr_key=attribute_)
                 for attribute_ in categorical_attributes_keys
@@ -329,6 +348,9 @@ class Biolord(BaseModelClass):
                     attr_key=retrieval_attribute_key,
                 )
             ]
+
+        if MULTI_FIELD is not None:
+            anndata_fields += MULTI_FIELD
 
         adata_manager = AnnDataManager(
             fields=anndata_fields,
