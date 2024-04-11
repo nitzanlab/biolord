@@ -701,6 +701,7 @@ class BiolordClassifyModule(BiolordModule):
         self.loss_regression = loss_regression
         self.mm_regression_loss_fn = nn.BCEWithLogitsLoss()
         self.classify_all = classify_all
+        self.n_features = np.sum(self.n_vars)
 
         if isinstance(categorical_attributes_missing, dict):
             self.categorical_attributes_missing = categorical_attributes_missing
@@ -734,7 +735,7 @@ class BiolordClassifyModule(BiolordModule):
                 self.ordered_regressors = nn.ModuleDict(
                     {
                         attribute_: nn.Linear(
-                            in_features=self.n_genes,
+                            in_features=self.n_features,
                             out_features=len_,
                             bias=bias,
                         )
@@ -745,7 +746,7 @@ class BiolordClassifyModule(BiolordModule):
                 self.ordered_regressors = nn.ModuleDict(
                     {
                         attribute_: Decoder(
-                            n_input=self.n_genes,
+                            n_input=self.n_features,
                             n_output=len_,
                             n_hidden=classifier_nn_width,
                             n_layers=classifier_nn_depth,
@@ -760,7 +761,7 @@ class BiolordClassifyModule(BiolordModule):
         for attribute_, unique_categories in self.categorical_attributes_map.items():
             if self.categorical_attributes_missing[attribute_] is not None:
                 self.categorical_classifiers[attribute_] = Classifier(
-                    n_input=self.n_genes,
+                    n_input=self.n_features,
                     n_labels=len(unique_categories) - 1,
                     n_hidden=classifier_nn_width,
                     n_layers=classifier_nn_depth,
@@ -769,7 +770,7 @@ class BiolordClassifyModule(BiolordModule):
                 )
             elif self.classify_all:
                 self.categorical_classifiers[attribute_] = Classifier(
-                    n_input=self.n_genes,
+                    n_input=self.n_features,
                     n_labels=len(unique_categories),
                     n_hidden=classifier_nn_width,
                     n_layers=classifier_nn_depth,
@@ -778,8 +779,12 @@ class BiolordClassifyModule(BiolordModule):
                 )
 
     def _get_inference_input(self, tensors: dict, **kwargs):
-        x = tensors[self.x_locs]  # batch_size, n_genes
         sample_indices = tensors[REGISTRY_KEYS.INDICES_KEY].long().ravel()
+        x_dict = {}
+        for x_loc_ in self.x_locs:
+            x_dict[x_loc_] = tensors[x_loc_]  # batch_size, n_vars
+
+        x = torch.cat([tensors[x_loc_] for x_loc_ in self.x_locs], dim=1)  # batch_size, n_features
 
         classification = self.classify(x)
 
@@ -797,7 +802,7 @@ class BiolordClassifyModule(BiolordModule):
             ordered_attribute_dict[attribute_] = tensors[attribute_]
 
         input_dict = {
-            "genes": x,
+            "x_dict": x_dict,
             "sample_indices": sample_indices,
             "categorical_attribute_dict": categorical_attribute_dict,
             "ordered_attribute_dict": ordered_attribute_dict,
@@ -807,14 +812,14 @@ class BiolordClassifyModule(BiolordModule):
     @auto_move_data
     def classify(
         self,
-        genes: torch.Tensor,
+        features: torch.Tensor,
     ) -> dict[str, torch.Tensor]:
         """Run classification.
 
         Parameters
         ----------
-        genes
-            Gene expression used for classification.
+        features
+            Measurements used for classification.
 
         Returns
         -------
@@ -823,17 +828,17 @@ class BiolordClassifyModule(BiolordModule):
         """
         classification = {}
         for attribute_, classifier_ in self.categorical_classifiers.items():
-            classification[attribute_] = classifier_(genes)
+            classification[attribute_] = classifier_(features)
 
         for attribute_, regressor_ in self.ordered_regressors.items():
-            classification[attribute_] = regressor_(genes)
+            classification[attribute_] = regressor_(features)
 
         return classification
 
     @auto_move_data
     def _classification_loss(self, tensors: dict[str, torch.Tensor]):
         """Get module classification loss."""
-        x = tensors[self.x_locs]  # batch_size, n_genes
+        x = torch.cat([tensors[x_loc_] for x_loc_ in self.x_locs], dim=1)  # batch_size, n_features
 
         classification_loss = torch.tensor([0.0]).to(self.device)
         classification = self.classify(x)
@@ -930,8 +935,7 @@ class BiolordClassifyModule(BiolordModule):
         mse_dict = {}
         mse_val = 0
 
-        x = tensors[self.x_locs]  # .detach().cpu().numpy()  # batch_size, n_genes
-
+        x = torch.cat([tensors[x_loc_] for x_loc_ in self.x_locs], dim=1)  # batch_size, n_features
         classification = self.classify(x)
 
         for attribute_ in self.categorical_classifiers:
