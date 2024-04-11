@@ -1,4 +1,4 @@
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Union
 
 import numpy as np
 import torch
@@ -51,12 +51,12 @@ class BiolordModule(BaseModuleClass):
 
     Parameters
     ----------
-    n_genes
-        Number of input genes.
+    n_vars
+        Number of input vars per modality.
     n_samples
         Number of layers.
-    x_loc
-        The expression data location.
+    x_locs
+        The data locations.
     ordered_attributes_map
         Dictionary of ordered classes and their dimensions.
     categorical_attributes_map
@@ -104,15 +104,15 @@ class BiolordModule(BaseModuleClass):
 
     def __init__(
         self,
-        n_genes: int,
+        n_vars: int,
         n_samples: int,
-        x_loc: str,
+        x_locs: list,
         ordered_attributes_map: Optional[dict[str, int]] = None,
         categorical_attributes_map: Optional[dict[str, dict]] = None,
         n_latent: int = 32,
         n_latent_attribute_categorical: int = 4,
         n_latent_attribute_ordered: int = 16,
-        gene_likelihood: Literal["normal", "nb", "poisson"] = "normal",
+        gene_likelihoods: Union[Literal["normal", "nb", "poisson"], list[Literal["normal", "nb", "poisson"]]] = None,
         reconstruction_penalty: float = 1e2,
         unknown_attribute_penalty: float = 1e1,
         use_batch_norm: bool = True,
@@ -129,10 +129,23 @@ class BiolordModule(BaseModuleClass):
         eval_r2_ordered: bool = False,
         decoder_dropout_rate: float = 0.1,
         seed: int = 0,
+        **kwargs: Any,
     ):
         super().__init__()
-        gene_likelihood = gene_likelihood.lower()
-        assert gene_likelihood in ["normal", "nb", "poisson"], gene_likelihood
+        gene_likelihood = kwargs.pop("gene_likelihood", None)
+        if gene_likelihood is not None:
+            if gene_likelihoods is not None:
+                raise KeyError(
+                    f"Please pass either gene_likelihood ({gene_likelihood}) or gene_likelihoods ({gene_likelihoods})."
+                )
+            gene_likelihoods = [gene_likelihood]
+
+        for i, gene_likelihood in enumerate(gene_likelihoods):
+            gene_likelihoods[i] = gene_likelihood.lower()
+            assert gene_likelihoods[i] in ["normal", "nb", "poisson"], gene_likelihoods[i]
+
+        if gene_likelihoods is None:
+            gene_likelihoods = ["normal" for _ in x_locs]
 
         default_width = 256
         default_depth = 2
@@ -146,12 +159,12 @@ class BiolordModule(BaseModuleClass):
         self.unknown_attribute_penalty = unknown_attribute_penalty
         self.mm_regression_loss_fn = nn.BCEWithLogitsLoss()
 
-        self.n_genes = n_genes
+        self.n_vars = n_vars
         self.n_latent = n_latent
-        self.x_loc = x_loc
+        self.x_locs = x_locs
         self.n_latent_attribute_categorical = n_latent_attribute_categorical
         self.n_latent_attribute_ordered = n_latent_attribute_ordered
-        self.gene_likelihood = gene_likelihood
+        self.gene_likelihoods = gene_likelihoods
         self.use_batch_norm = use_batch_norm
         self.use_layer_norm = use_layer_norm
         self.eval_r2_ordered = eval_r2_ordered
@@ -228,32 +241,38 @@ class BiolordModule(BaseModuleClass):
         for attribute_ in reps_categorical:
             self.categorical_embeddings[attribute_] = self.categorical_embeddings[attribute_.split("_rep")[0]]
 
-        # Decoder components
-        if self.gene_likelihood in ["nb", "poisson"]:
-            self.decoder = DecoderSCVI(
-                n_input=self.n_decoder_input,
-                n_output=n_genes,
-                n_hidden=decoder_width,
-                n_layers=decoder_depth,
-                use_batch_norm=use_batch_norm,
-                use_layer_norm=use_layer_norm,
-                scale_activation="softmax",
-            )
-            self.px_r = torch.nn.Parameter(torch.randn(n_genes))
-        else:
-            self.decoder = Decoder(
-                n_input=self.n_decoder_input,
-                n_output=n_genes,
-                n_hidden=decoder_width,
-                n_layers=decoder_depth,
-                use_batch_norm=use_batch_norm,
-                use_layer_norm=use_layer_norm,
-                use_activation=decoder_activation,
-            )
+        # Decoders components
+        self.decoders = nn.ModuleDict()
+        self.px_r_dict = {}
+        for gene_likelihood, x_loc, n_var in zip(gene_likelihoods, x_locs, n_vars):
+            if gene_likelihood in ["nb", "poisson"]:
+                self.decoders[x_loc] = DecoderSCVI(
+                    n_input=self.n_decoder_input,
+                    n_output=n_var,
+                    n_hidden=decoder_width,
+                    n_layers=decoder_depth,
+                    use_batch_norm=use_batch_norm,
+                    use_layer_norm=use_layer_norm,
+                    scale_activation="softmax",
+                )
+                self.px_r[x_loc] = torch.nn.Parameter(torch.randn(n_var))
+            else:
+                self.decoders[x_loc] = Decoder(
+                    n_input=self.n_decoder_input,
+                    n_output=n_var,
+                    n_hidden=decoder_width,
+                    n_layers=decoder_depth,
+                    use_batch_norm=use_batch_norm,
+                    use_layer_norm=use_layer_norm,
+                    use_activation=decoder_activation,
+                )
 
     def _get_inference_input(self, tensors: dict[Any, Any], **kwargs):
-        x = tensors[self.x_loc]  # batch_size, n_genes
         sample_indices = tensors[REGISTRY_KEYS.INDICES_KEY].long().ravel()
+
+        x_dict = {}
+        for x_loc_ in self.x_locs:
+            x_dict[x_loc_] = tensors[x_loc_]  # batch_size, n_vars
 
         categorical_attribute_dict = {}
         for attribute_ in self.categorical_attributes_map:
@@ -266,7 +285,7 @@ class BiolordModule(BaseModuleClass):
             ordered_attribute_dict[attribute_] = tensors[attribute_]
 
         input_dict = {
-            "genes": x,
+            "x_dict": x_dict,
             "sample_indices": sample_indices,
             "categorical_attribute_dict": categorical_attribute_dict,
             "ordered_attribute_dict": ordered_attribute_dict,
@@ -292,7 +311,7 @@ class BiolordModule(BaseModuleClass):
     @auto_move_data
     def _inference_attribute_embeddings(
         self,
-        genes,
+        x_dict,
         categorical_attribute_dict,
         ordered_attribute_dict,
         nullify_attribute=None,
@@ -300,7 +319,7 @@ class BiolordModule(BaseModuleClass):
         """Inference over attribute embeddings."""
         nullify_attribute = [] if nullify_attribute is None else nullify_attribute
         inference_output = {}
-        batch_size = genes.shape[0]
+        batch_size = list(x_dict.values())[0].shape
         for attribute_, embedding_ in self.categorical_embeddings.items():
             latent_i = embedding_(categorical_attribute_dict[attribute_].long())
             latent_i = latent_i.view(batch_size, self.n_latent_attribute_categorical).unsqueeze(
@@ -331,7 +350,7 @@ class BiolordModule(BaseModuleClass):
     @auto_move_data
     def inference(
         self,
-        genes: torch.Tensor,
+        x_dict: dict[Any, Any],
         sample_indices: torch.Tensor,
         categorical_attribute_dict: dict[Any, Any],
         ordered_attribute_dict: dict[Any, Any],
@@ -341,8 +360,8 @@ class BiolordModule(BaseModuleClass):
 
         Parameters
         ----------
-        genes
-            Input expression.
+        x_dict
+            Dictionary with input values.
         sample_indices
             Indices in the :class:`~anndata.AnnData` object of the input samples.
         categorical_attribute_dict
@@ -354,17 +373,17 @@ class BiolordModule(BaseModuleClass):
 
         Returns
         -------
-        Dictionary with the module's expected input tensors (`genes`, `sample_indices`, `categorical_attribute_dict`, and `ordered_attribute_dict`).
+        Dictionary with the module's expected input tensors (`x_dict`, `sample_indices`, `categorical_attribute_dict`, and `ordered_attribute_dict`).
         """
         nullify_attribute = [] if nullify_attribute is None else nullify_attribute
         inference_output = {}
-        x_ = genes
-        library = torch.log(genes.sum(1)).unsqueeze(1)
+
+        library = {obs_name: torch.log(x.sum(1)).unsqueeze(1) for obs_name, x in x_dict.items()}
 
         latent_unknown_attributes = self._get_latent_unknown_attributes(sample_indices=sample_indices)
 
         latent_classes = self._inference_attribute_embeddings(
-            genes=x_,
+            x_dict=x_dict,
             categorical_attribute_dict=categorical_attribute_dict,
             ordered_attribute_dict=ordered_attribute_dict,
             nullify_attribute=nullify_attribute,
@@ -394,7 +413,7 @@ class BiolordModule(BaseModuleClass):
     def generative(
         self,
         latent: torch.Tensor,
-        library: torch.Tensor = None,
+        library: dict[Any, Any] = None,
     ) -> dict[str, Any]:
         """Runs the generative step.
 
@@ -409,35 +428,39 @@ class BiolordModule(BaseModuleClass):
         -------
         Dictionary with the generative predictions of the expression distribution.
         """
-        if self.gene_likelihood in ["nb", "poisson"]:
-            px_scale, _, px_rate, _ = self.decoder(
-                dispersion="gene",
-                z=latent,
-                library=library,
-            )
-            px_r = torch.exp(self.px_r)
-            px = (
-                NegativeBinomial(mu=px_rate, theta=px_r, scale=px_scale)
-                if self.gene_likelihood == "nb"
-                else Poisson(px_rate)
-            )  # , scale=px_scale)
+        gen_dict = {}
+        for i, x_loc_ in enumerate(self.x_locs):
+            if self.gene_likelihoods[i] in ["nb", "poisson"]:
+                px_scale, _, px_rate, _ = self.decoders[x_loc_](
+                    dispersion="gene",
+                    z=latent,
+                    library=library[x_loc_],
+                )
+                px_r = torch.exp(self.px_r[x_loc_])
+                px = (
+                    NegativeBinomial(mu=px_rate, theta=px_r, scale=px_scale)
+                    if self.gene_likelihood == "nb"
+                    else Poisson(px_rate)
+                )
 
-            return {
-                "means": px.mean,
-                "variances": px.variance,
-                "distribution": px,
-                "samples": px.sample().squeeze(0),
-            }
+                gen_dict[x_loc_] = {
+                    "means": px.mean,
+                    "variances": px.variance,
+                    "distribution": px,
+                    "samples": px.sample().squeeze(0),
+                }
 
-        else:
-            p_m, p_v = self.decoder(x=latent)
-            px = Normal(loc=p_m, scale=p_v.sqrt())
-            return {
-                "means": px.loc,
-                "variances": px.variance,
-                "distribution": px,
-                "samples": px.sample().squeeze(0),
-            }
+            else:
+                p_m, p_v = self.decoder[x_loc_](x=latent)
+                px = Normal(loc=p_m, scale=p_v.sqrt())
+                gen_dict[x_loc_] = {
+                    "means": px.loc,
+                    "variances": px.variance,
+                    "distribution": px,
+                    "samples": px.sample().squeeze(0),
+                }
+
+        return gen_dict
 
     @auto_move_data
     def loss(
@@ -461,24 +484,28 @@ class BiolordModule(BaseModuleClass):
         -------
         The loss elements.
         """
-        x_ = tensors[self.x_loc]
-        means = generative_outputs["means"]
-        variances = generative_outputs["variances"]
+        reconstruction_loss_dict = {}
+        for i, x_loc_ in enumerate(self.x_locs):
+            x_ = tensors[x_loc_]  # batch_size, n_vars
+            means = generative_outputs[x_loc_]["means"]
+            variances = generative_outputs[x_loc_]["variances"]
 
-        if self.gene_likelihood in ["nb", "poisson"]:
-            reconstruction_loss = -generative_outputs["distribution"].log_prob(x_).sum(-1)
-            reconstruction_loss = reconstruction_loss.mean()
-        else:
-            reconstruction_loss = self.ae_loss_fn(input=means, target=x_, var=variances)
+            if self.gene_likelihood[i] in ["nb", "poisson"]:
+                reconstruction_loss = -generative_outputs[x_loc_]["distribution"].log_prob(x_).sum(-1)
+                reconstruction_loss = reconstruction_loss.mean()
+            else:
+                reconstruction_loss = self.ae_loss_fn(input=means, target=x_, var=variances)
 
-        reconstruction_loss += self.reconstruction_penalty * self.ae_loss_mse_fn(input=means, target=x_)
+            reconstruction_loss_dict[x_loc_] = reconstruction_loss + self.reconstruction_penalty * self.ae_loss_mse_fn(
+                input=means, target=x_
+            )
 
         unknown_attribute_penalty_loss_val = self.unknown_attribute_penalty_loss(
             inference_outputs["latent_unknown_attributes"]
         )
 
         return {
-            LOSS_KEYS.RECONSTRUCTION: reconstruction_loss,
+            LOSS_KEYS.RECONSTRUCTION: reconstruction_loss_dict,
             LOSS_KEYS.UNKNOWN_ATTRIBUTE_PENALTY: unknown_attribute_penalty_loss_val,
         }
 
@@ -506,76 +533,89 @@ class BiolordModule(BaseModuleClass):
         -------
         The :math:`R^2` of the mean and standard deviation predictions of the gene expression.
         """
-        x = tensors[self.x_loc].detach().cpu().numpy()  # batch_size, n_genes
+        r2_mean_dict = {}
+        r2_var_dict = {}
+        for x_loc_ in self.x_locs:
+            x = tensors[x_loc_].detach().cpu().numpy()  # batch_size, n_genes
 
-        batch_size = x.shape[0]
-        indices = torch.zeros(batch_size).to(self.device)
-        if self.eval_r2_ordered:
-            for ordered_attribute_, len_ in self.ordered_attributes_map.items():
-                if len_ > 1:
-                    attribute_vals = tensors[ordered_attribute_]  # (batch_size, n_class)
-                    indices += (
-                        attribute_vals
-                        * torch.arange(attribute_vals.shape[1])
-                        .view(1, -1)
-                        .repeat(batch_size, 1)
-                        .to(attribute_vals.device)
-                    ).sum(dim=1)
+            batch_size = x.shape[0]
+            indices = torch.zeros(batch_size).to(self.device)
+            if self.eval_r2_ordered:
+                for ordered_attribute_, len_ in self.ordered_attributes_map.items():
+                    if len_ > 1:
+                        attribute_vals = tensors[ordered_attribute_]  # (batch_size, n_class)
+                        indices += (
+                            attribute_vals
+                            * torch.arange(attribute_vals.shape[1])
+                            .view(1, -1)
+                            .repeat(batch_size, 1)
+                            .to(attribute_vals.device)
+                        ).sum(dim=1)
+                    else:
+                        indices += tensors[ordered_attribute_].view(
+                            -1,
+                        )  # (batch_size,)
+
+            for categorical_attribute_ in self.categorical_attributes_map:
+                indices += tensors[categorical_attribute_].view(
+                    -1,
+                )  # (batch_size,)
+
+            unique_indices = indices.unique()
+
+            r2_mean = 0.0
+            r2_var = 0.0
+            k = 0
+
+            pred_x_mean = (
+                torch.nan_to_num(generative_outputs[x_loc_]["means"], nan=0, neginf=0, posinf=100)
+                .detach()
+                .cpu()
+                .numpy()
+            )  # batch_size, n_genes
+            pred_x_var = (
+                torch.nan_to_num(generative_outputs[x_loc_]["variances"], nan=0, neginf=0, posinf=100)
+                .detach()
+                .cpu()
+                .numpy()
+            )  # batch_size, n_genes
+
+            for index in unique_indices:
+                index_mask = (indices == index).detach().cpu().numpy()
+                if index_mask.sum() > 2:
+                    x_index = x[index_mask]
+                    means_index = pred_x_mean[index_mask]
+                    variances_index = pred_x_var[index_mask]
+
+                    true_mean_index = np.nanmean(x_index, axis=0)
+                    pred_mean_index = np.nanmean(means_index, axis=0)
+
+                    true_var_index = np.nanvar(x_index, axis=0)
+                    pred_var_index = (
+                        np.nanvar(means_index, axis=0)
+                        if self.gene_likelihood in ["nb", "poisson"]
+                        else np.nanmean(variances_index, axis=0)
+                    )
+
+                    r2_mean += r2_score(true_mean_index, pred_mean_index)
+                    r2_var += r2_score(true_var_index, pred_var_index)
+                    k += 1
                 else:
-                    indices += tensors[ordered_attribute_].view(
-                        -1,
-                    )  # (batch_size,)
-
-        for categorical_attribute_ in self.categorical_attributes_map:
-            indices += tensors[categorical_attribute_].view(
-                -1,
-            )  # (batch_size,)
-
-        unique_indices = indices.unique()
-
-        r2_mean = 0.0
-        r2_var = 0.0
-        k = 0
-
-        pred_x_mean = (
-            torch.nan_to_num(generative_outputs["means"], nan=0, neginf=0, posinf=100).detach().cpu().numpy()
-        )  # batch_size, n_genes
-        pred_x_var = (
-            torch.nan_to_num(generative_outputs["variances"], nan=0, neginf=0, posinf=100).detach().cpu().numpy()
-        )  # batch_size, n_genes
-
-        for index in unique_indices:
-            index_mask = (indices == index).detach().cpu().numpy()
-            if index_mask.sum() > 2:
-                x_index = x[index_mask]
-                means_index = pred_x_mean[index_mask]
-                variances_index = pred_x_var[index_mask]
-
-                true_mean_index = np.nanmean(x_index, axis=0)
-                pred_mean_index = np.nanmean(means_index, axis=0)
-
-                true_var_index = np.nanvar(x_index, axis=0)
-                pred_var_index = (
-                    np.nanvar(means_index, axis=0)
-                    if self.gene_likelihood in ["nb", "poisson"]
-                    else np.nanmean(variances_index, axis=0)
-                )
-
-                r2_mean += r2_score(true_mean_index, pred_mean_index)
-                r2_var += r2_score(true_var_index, pred_var_index)
-                k += 1
+                    continue
+            if k > 0:
+                r2_mean_dict[x_loc_] = r2_mean / k
+                r2_var_dict[x_loc_] = r2_var / k
             else:
-                continue
-        if k > 0:
-            return r2_mean / k, r2_var / k
-        else:
-            return r2_mean, r2_var
+                r2_mean_dict[x_loc_] = r2_mean
+                r2_var_dict[x_loc_] = r2_var
+
+        return r2_mean_dict, r2_var_dict
 
     @torch.no_grad()
     def get_expression(
         self, tensors: dict[str, torch.Tensor], **inference_kwargs: Any
     ) -> tuple[torch.tensor, torch.tensor]:
-        """Computes gene expression means and standard deviation.
+        """Computes expression means and standard deviation.
 
         Parameters
         ----------
@@ -594,8 +634,14 @@ class BiolordModule(BaseModuleClass):
             inference_kwargs=inference_kwargs,
         )
 
-        mus = torch.nan_to_num(generative_outputs["means"], nan=0, neginf=0, posinf=100)  # batch_size, n_genes
-        stds = torch.nan_to_num(generative_outputs["variances"], nan=0, neginf=0, posinf=100)  # batch_size, n_genes
+        mus = {
+            x_loc_: torch.nan_to_num(generative_output["means"], nan=0, neginf=0, posinf=100)
+            for x_loc_, generative_output in generative_outputs.items()
+        }  # batch_size, n_genes
+        stds = {
+            x_loc_: torch.nan_to_num(generative_output["variances"], nan=0, neginf=0, posinf=100)
+            for x_loc_, generative_output in generative_outputs.items()
+        }  # batch_size, n_genes
         return mus, stds
 
 
@@ -732,7 +778,7 @@ class BiolordClassifyModule(BiolordModule):
                 )
 
     def _get_inference_input(self, tensors: dict, **kwargs):
-        x = tensors[self.x_loc]  # batch_size, n_genes
+        x = tensors[self.x_locs]  # batch_size, n_genes
         sample_indices = tensors[REGISTRY_KEYS.INDICES_KEY].long().ravel()
 
         classification = self.classify(x)
@@ -787,7 +833,7 @@ class BiolordClassifyModule(BiolordModule):
     @auto_move_data
     def _classification_loss(self, tensors: dict[str, torch.Tensor]):
         """Get module classification loss."""
-        x = tensors[self.x_loc]  # batch_size, n_genes
+        x = tensors[self.x_locs]  # batch_size, n_genes
 
         classification_loss = torch.tensor([0.0]).to(self.device)
         classification = self.classify(x)
@@ -884,7 +930,7 @@ class BiolordClassifyModule(BiolordModule):
         mse_dict = {}
         mse_val = 0
 
-        x = tensors[self.x_loc]  # .detach().cpu().numpy()  # batch_size, n_genes
+        x = tensors[self.x_locs]  # .detach().cpu().numpy()  # batch_size, n_genes
 
         classification = self.classify(x)
 

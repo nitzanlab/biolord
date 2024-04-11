@@ -95,12 +95,12 @@ class Biolord(BaseModelClass):
         self.ordered_attributes_map = {}
         self.retrieval_attribute_dict = {}
         self.categorical_attributes_missing = self.registry_["setup_args"]["categorical_attributes_missing"]
-        self.x_loc = None
+        self.x_locs = None
+        self.n_vars = None
 
         self._set_attributes_maps()
 
         self.n_latent = n_latent
-        self.n_genes = adata.n_vars
 
         self.split_key = split_key
         self.scores = {}
@@ -125,9 +125,9 @@ class Biolord(BaseModelClass):
 
         if self.train_classifiers:
             self.module = BiolordClassifyModule(
-                n_genes=self.n_genes,
+                n_vars=self.n_vars,
                 n_samples=self.n_samples,
-                x_loc=self.x_loc,
+                x_loc=self.x_locs,
                 categorical_attributes_map=self.categorical_attributes_map,
                 ordered_attributes_map=self.ordered_attributes_map,
                 categorical_attributes_missing=self.categorical_attributes_missing,
@@ -136,9 +136,9 @@ class Biolord(BaseModelClass):
             ).float()
         else:
             self.module = BiolordModule(
-                n_genes=self.n_genes,
+                n_vars=self.n_vars,
                 n_samples=self.n_samples,
-                x_loc=self.x_loc,
+                x_locs=self.x_locs,
                 ordered_attributes_map=self.ordered_attributes_map,
                 categorical_attributes_map=self.categorical_attributes_map,
                 n_latent=self.n_latent,
@@ -175,7 +175,8 @@ class Biolord(BaseModelClass):
                 )
             }
 
-        self.x_loc = self.registry_["setup_args"]["FIELD"].attr_name
+        self.x_locs = self.registry_["setup_args"]["layer_fields"]
+        self.n_vars = self.registry_["setup_args"]["n_vars"]
 
     @property
     def training_plan(self):
@@ -218,12 +219,11 @@ class Biolord(BaseModelClass):
     def setup_anndata(
         cls,
         adata: AnnData,
-        ordered_attributes_keys: Optional[list[str]] = None,
-        categorical_attributes_keys: Optional[list[str]] = None,
+        ordered_attributes_keys: Optional[Union[str, list[str]]] = None,
+        categorical_attributes_keys: Optional[Union[str, list[str]]] = None,
         categorical_attributes_missing: Optional[dict[str, str]] = None,
         retrieval_attribute_key: Optional[str] = None,
-        layer: Optional[str] = None,
-        multi_layer: Optional[str] = None,
+        layers: Optional[Union[str, list[str]]] = None,
         **kwargs: Any,
     ) -> None:
         """Setup function.
@@ -240,10 +240,9 @@ class Biolord(BaseModelClass):
             Categories representing missing labels. Only used if ``train_classifiers=True``.
         retrieval_attribute_key
             Valid :attr:`anndata.AnnData.obs` key for an attribute to evaluate retrieval performance over.
-        layer
-            Expression layer in :attr:`anndata.AnnData.layers` to use. If :obj:`None`, use :attr:`anndata.AnnData.X`.
-        multi_layer
-            Additional expression layer in :attr:`anndata.AnnData.layers` to use. If :obj:`None`, use :attr:`anndata.AnnData.X`.
+        layers
+            Expression layers in :attr:`anndata.AnnData.layers` or :attr:`anndata.AnnData.obsm` to use.
+            If :obj:`None`, use :attr:`anndata.AnnData.X`.
         kwargs
             Keyword arguments for :meth:`~scvi.data.AnnDataManager.register_fields`.
 
@@ -251,36 +250,49 @@ class Biolord(BaseModelClass):
         -------
         Nothing, just sets up ``adata``.
         """
+        layer = kwargs.pop("layer", None)
         if layer is not None:
-            if layer not in adata.layers:
-                raise KeyError(f"{layer} is not a valid key in `adata.layers`.")
-            logger.info(f"Using data from adata.layers[{layer!r}]")
-            FIELD = LayerField(
-                registry_key="layers",
-                layer=layer,
-                is_count_data=True,
-            )
+            if layers is not None:
+                raise KeyError(f"Please pass either layer ({layer}) or layers ({layers}).")
+            layers = [layer]
+
+        layer_registries = []
+        layer_fields = []
+        n_vars = []
+        if layers is not None:
+            for i, layer_c in enumerate(layers):
+                if layer_c in adata.obsm:
+                    logger.info(f"For modality #{(i+1)} using multi data from adata.obsm[{layer_c!r}]")
+                    layer_fields.append(layer_c)
+                    n_vars.append(adata.obsm[layer_c].shape[1])
+                    layer_registries.append(
+                        ObsmField(
+                            layer_c,
+                            layer_c,
+                            is_count_data=False,
+                            correct_data_format=True,
+                        )
+                    )
+                elif layer_c in adata.layers:
+                    logger.info(f"For modality #{(i+1)} using data from adata.layers[{layer_c!r}]")
+                    layer_fields.append(layer_c)
+                    n_vars.append(adata.layers[layer_c].shape[1])
+                    layer_registries.append(LayerField(registry_key="layers", layer=layer_c, is_count_data=False))
+
+                elif layer_c == "X":
+                    logger.info(f"For modality #{(i+1)} using data from `adata.X`.")
+                    n_vars.append(adata.X.shape[1])
+                    layer_fields.append(layer_c)
+                    layer_registries.append(LayerField(registry_key="X", layer=None, is_count_data=False))
+                else:
+                    raise KeyError(
+                        f"For modality #{(i+1)} class {layer_c} " f"not found in `adata.layers` or `adata.obsm`."
+                    )
         else:
             logger.info("Using data from `adata.X`.")
-            FIELD = LayerField(registry_key="X", layer=None, is_count_data=False)
-
-        if multi_layer is not None:
-            # validata obs
-            if multi_layer in adata.obsm:
-                logger.info(f"Using multi data from adata.obsm[{multi_layer!r}]")
-                MULTI_FIELD = ObsmField(
-                    multi_layer,
-                    multi_layer,
-                    is_count_data=False,
-                    correct_data_format=True,
-                )
-            elif multi_layer in adata.layers:
-                logger.info(f"Using multi data from adata.layers[{multi_layer!r}]")
-                MULTI_FIELD = LayerField(registry_key="layers", layer=multi_layer, is_count_data=False)
-            else:
-                raise KeyError(f"class {multi_layer} not found in `adata.layers` or `adata.obsm`.")
-        else:
-            MULTI_FIELD = None
+            layer_fields.append("X")
+            n_vars.append(adata.X.shape[1])
+            layer_registries.append(LayerField(registry_key="X", layer=None, is_count_data=False))
 
         ordered_attributes_keys = ordered_attributes_keys if isinstance(ordered_attributes_keys, list) else []
 
@@ -318,7 +330,7 @@ class Biolord(BaseModelClass):
         setup_method_args = cls._get_setup_method_args(**locals())
         adata.obs["_indices"] = np.arange(adata.n_obs)
         anndata_fields = (
-            [FIELD]
+            layer_registries
             + [NumericalObsField(REGISTRY_KEYS.INDICES_KEY, "_indices")]
             + [
                 CategoricalObsField(registry_key=attribute_, attr_key=attribute_)
@@ -348,9 +360,6 @@ class Biolord(BaseModelClass):
                     attr_key=retrieval_attribute_key,
                 )
             ]
-
-        if MULTI_FIELD is not None:
-            anndata_fields += MULTI_FIELD
 
         adata_manager = AnnDataManager(
             fields=anndata_fields,
