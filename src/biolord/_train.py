@@ -86,6 +86,9 @@ class biolordTrainingPlan(TrainingPlan):
         self.validation_step_outputs = []
         self._epoch_keys = []
 
+        self.epoch_keys = [f"generative_mean_{x_loc_}_accuracy" for x_loc_ in module.x_locs]
+        self.epoch_keys = [f"generative_var_{x_loc_}_accuracy" for x_loc_ in module.x_locs]
+        self.epoch_keys = [f"{LOSS_KEYS.RECONSTRUCTION}_{x_loc_}" for x_loc_ in module.x_locs]
         self.epoch_keys = [
             "generative_mean_accuracy",  # accuracy in prediction of mean gene exp.
             "generative_var_accuracy",  # accuracy in prediction of variance of gene exp.
@@ -128,7 +131,7 @@ class biolordTrainingPlan(TrainingPlan):
                         "params": list(
                             filter(
                                 lambda p: p.requires_grad,
-                                self.module.decoder.parameters(),
+                                self.module.decoders.parameters(),
                             )
                         ),
                         "lr": self.decoder_lr,
@@ -185,6 +188,16 @@ class biolordTrainingPlan(TrainingPlan):
     def epoch_keys(self, epoch_keys: list):
         self._epoch_keys.extend(epoch_keys)
 
+    def _results(self, losses):
+        results = {
+            f"{LOSS_KEYS.RECONSTRUCTION}_{x_loc_}": val.item()
+            for x_loc_, val in losses[LOSS_KEYS.RECONSTRUCTION_DICT].items()
+        }
+
+        results.update({LOSS_KEYS.RECONSTRUCTION: losses[LOSS_KEYS.RECONSTRUCTION].item()})
+        results.update({LOSS_KEYS.UNKNOWN_ATTRIBUTE_PENALTY: losses[LOSS_KEYS.UNKNOWN_ATTRIBUTE_PENALTY].item()})
+        return results
+
     def training_step(self, batch):
         """Training step."""
         optimizers = self.optimizers()
@@ -205,10 +218,7 @@ class biolordTrainingPlan(TrainingPlan):
         for optimizer in optimizers:
             optimizer.step()
 
-        results = {
-            LOSS_KEYS.RECONSTRUCTION: losses[LOSS_KEYS.RECONSTRUCTION].item(),
-            LOSS_KEYS.UNKNOWN_ATTRIBUTE_PENALTY: losses[LOSS_KEYS.UNKNOWN_ATTRIBUTE_PENALTY].item(),
-        }
+        results = self._results(losses)
 
         self.iter_count += 1
 
@@ -240,12 +250,11 @@ class biolordTrainingPlan(TrainingPlan):
         """Validation step."""
         inf_outputs, gen_outputs, losses = self(batch)
 
-        r2_mean, r2_var = self.module.r2_metric(batch, gen_outputs)
+        r2_mean_dict, r2_var_dict, r2_mean, r2_var = self.module.r2_metric(batch, gen_outputs)
 
-        results = {}
-        for key in losses:
-            results.update({key: losses[key].item()})
-
+        results = self._results(losses)
+        results.update({f"generative_mean_{x_loc_}_accuracy": val for x_loc_, val in r2_mean_dict.items()})
+        results.update({f"generative_var_{x_loc_}_accuracy": val for x_loc_, val in r2_var_dict.items()})
         results.update({"generative_mean_accuracy": r2_mean})
         results.update({"generative_var_accuracy": r2_var})
         results.update({"biolord_metric": biolord_metric(r2_mean, r2_var)})
@@ -379,11 +388,8 @@ class biolordClassifyTrainingPlan(biolordTrainingPlan):
         for optimizer in optimizers:
             optimizer.step()
 
-        results = {
-            LOSS_KEYS.RECONSTRUCTION: losses[LOSS_KEYS.RECONSTRUCTION].item(),
-            LOSS_KEYS.UNKNOWN_ATTRIBUTE_PENALTY: losses[LOSS_KEYS.UNKNOWN_ATTRIBUTE_PENALTY].item(),
-            LOSS_KEYS.CLASSIFICATION: losses[LOSS_KEYS.CLASSIFICATION].item(),
-        }
+        results = self._results(losses)
+        results.update({LOSS_KEYS.CLASSIFICATION: losses[LOSS_KEYS.CLASSIFICATION].item()})
 
         self.iter_count += 1
 

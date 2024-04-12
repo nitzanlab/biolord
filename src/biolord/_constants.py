@@ -7,6 +7,7 @@ class LOSS_KEYS(str, Enum):
     """Module loss keys."""
 
     RECONSTRUCTION = "reconstruction_loss"
+    RECONSTRUCTION_DICT = "reconstruction_dict_loss"
     KL_LOSS = "kl_loss"
     CLASSIFICATION = "classification_loss"
     UNKNOWN_ATTRIBUTE_PENALTY = "unknown_attribute_penalty_loss"
