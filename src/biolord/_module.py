@@ -614,15 +614,17 @@ class BiolordModule(BaseModuleClass):
                     k += 1
                 else:
                     continue
-            r2_mean_all += r2_mean / n_locs
-            r2_var_all += r2_var / n_locs
 
             if k > 0:
                 r2_mean_dict[x_loc_] = r2_mean / k
                 r2_var_dict[x_loc_] = r2_var / k
+                r2_mean_all += r2_mean / (n_locs * k)
+                r2_var_all += r2_var / (n_locs * k)
             else:
                 r2_mean_dict[x_loc_] = r2_mean
                 r2_var_dict[x_loc_] = r2_var
+                r2_mean_all += r2_mean / n_locs
+                r2_var_all += r2_var / n_locs
 
         return r2_mean_dict, r2_var_dict, r2_mean_all, r2_var_all
 
