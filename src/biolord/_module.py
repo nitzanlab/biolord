@@ -247,6 +247,7 @@ class BiolordModule(BaseModuleClass):
             self.categorical_embeddings[attribute_] = self.categorical_embeddings[attribute_.split("_rep")[0]]
 
         # Decoders components
+
         self.decoders = nn.ModuleDict()
         self.px_r = {}
         for gene_likelihood, x_loc, n_var in zip(gene_likelihoods, x_locs, n_vars):
