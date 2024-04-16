@@ -247,12 +247,11 @@ class BiolordModule(BaseModuleClass):
             self.categorical_embeddings[attribute_] = self.categorical_embeddings[attribute_.split("_rep")[0]]
 
         # Decoders components
-
         self.decoders = nn.ModuleDict()
         self.px_r = {}
-        for gene_likelihood, x_loc, n_var in zip(gene_likelihoods, x_locs, n_vars):
+        for gene_likelihood, x_loc_, n_var in zip(gene_likelihoods, x_locs, n_vars):
             if gene_likelihood in ["nb", "poisson"]:
-                self.decoders[x_loc] = DecoderSCVI(
+                self.decoders[x_loc_] = DecoderSCVI(
                     n_input=self.n_decoder_input,
                     n_output=n_var,
                     n_hidden=decoder_width,
@@ -261,9 +260,9 @@ class BiolordModule(BaseModuleClass):
                     use_layer_norm=use_layer_norm,
                     scale_activation="softmax",
                 )
-                self.px_r[x_loc] = torch.nn.Parameter(torch.randn(n_var))
+                self.px_r[x_loc_] = torch.nn.Parameter(torch.randn(n_var))
             else:
-                self.decoders[x_loc] = Decoder(
+                self.decoders[x_loc_] = Decoder(
                     n_input=self.n_decoder_input,
                     n_output=n_var,
                     n_hidden=decoder_width,
@@ -384,7 +383,7 @@ class BiolordModule(BaseModuleClass):
         nullify_attribute = [] if nullify_attribute is None else nullify_attribute
         inference_output = {}
 
-        library = {obs_name: torch.log(x.sum(1)).unsqueeze(1) for obs_name, x in x_dict.items()}
+        library = {obs_name: torch.log1p(x.sum(1)).unsqueeze(1) for obs_name, x in x_dict.items()}
 
         latent_unknown_attributes = self._get_latent_unknown_attributes(sample_indices=sample_indices)
 
@@ -446,7 +445,7 @@ class BiolordModule(BaseModuleClass):
                 px = (
                     NegativeBinomial(mu=px_rate, theta=px_r, scale=px_scale)
                     if self.gene_likelihoods[i] == "nb"
-                    else Poisson(px_rate)
+                    else Poisson(px_rate, scale=px_scale)
                 )
 
                 gen_dict[x_loc_] = {
