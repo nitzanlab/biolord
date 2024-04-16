@@ -248,7 +248,7 @@ class BiolordModule(BaseModuleClass):
 
         # Decoders components
         self.decoders = nn.ModuleDict()
-        self.px_r_dict = {}
+        self.px_r = {}
         for gene_likelihood, x_loc, n_var in zip(gene_likelihoods, x_locs, n_vars):
             if gene_likelihood in ["nb", "poisson"]:
                 self.decoders[x_loc] = DecoderSCVI(
