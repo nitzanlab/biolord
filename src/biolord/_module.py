@@ -283,7 +283,7 @@ class BiolordModule(BaseModuleClass):
         self.unknown_attribute_penalty = unknown_attribute_penalty
         self.mm_regression_loss_fn = nn.BCEWithLogitsLoss()
         self.x_locs_weight = (
-            x_locs_weight if x_locs_weight is not None else torch.tensor([1 for _ in range(len(x_locs))])
+            torch.tensor(x_locs_weight) if x_locs_weight is not None else torch.tensor([1 for _ in range(len(x_locs))])
         )
         self.x_locs_weight = self.x_locs_weight / torch.sum(self.x_locs_weight)
 
