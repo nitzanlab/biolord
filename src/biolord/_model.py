@@ -665,7 +665,7 @@ class Biolord(BaseModelClass):
 
         monitor = trainer_kwargs.pop("monitor", "val_biolord_metric")
         save_ckpt_every_n_epoch = trainer_kwargs.pop("save_ckpt_every_n_epoch", 20)
-        enable_checkpointing = trainer_kwargs.pop("enable_checkpointing", True)
+        enable_checkpointing = trainer_kwargs.pop("enable_checkpointing", False)
 
         trainer_kwargs["callbacks"] = [] if "callbacks" not in trainer_kwargs.keys() else trainer_kwargs["callbacks"]
         if enable_checkpointing:
@@ -723,6 +723,7 @@ class Biolord(BaseModelClass):
             early_stopping_monitor=monitor,
             early_stopping_mode="max",
             enable_checkpointing=enable_checkpointing,
+            checkpointing_monitor=monitor,
             **trainer_kwargs,
         )
 
