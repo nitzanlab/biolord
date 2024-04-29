@@ -262,7 +262,7 @@ class BiolordModule(BaseModuleClass):
                 raise KeyError(
                     f"Please pass either gene_likelihood ({gene_likelihood}) or gene_likelihoods ({gene_likelihoods})."
                 )
-            gene_likelihoods = [gene_likelihood]
+            gene_likelihoods = [gene_likelihood for _ in x_locs]
 
         for i, gene_likelihood in enumerate(gene_likelihoods):
             gene_likelihoods[i] = gene_likelihood.lower()
@@ -752,9 +752,7 @@ class BiolordModule(BaseModuleClass):
         return r2_mean_dict, r2_var_dict, r2_mean_all, r2_var_all
 
     @torch.no_grad()
-    def get_expression(
-        self, tensors: dict[str, torch.Tensor], **inference_kwargs: Any
-    ) -> tuple[torch.tensor, torch.tensor]:
+    def get_expression(self, tensors: dict[str, torch.Tensor], **inference_kwargs: Any) -> tuple[dict, dict]:
         """Computes expression means and standard deviation.
 
         Parameters

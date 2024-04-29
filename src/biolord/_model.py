@@ -263,11 +263,11 @@ class Biolord(BaseModelClass):
             for i, layer_c in enumerate(layers):
                 if layer_c in adata.obsm:
                     logger.info(f"For modality #{(i+1)} using multi data from adata.obsm[{layer_c!r}]")
-                    layer_fields.append(layer_c)
+                    layer_fields.append(f"obsm_{layer_c}")
                     n_vars.append(adata.obsm[layer_c].shape[1])
                     layer_registries.append(
                         ObsmField(
-                            layer_c,
+                            f"obsm_{layer_c}",
                             layer_c,
                             is_count_data=False,
                             correct_data_format=True,
@@ -275,9 +275,11 @@ class Biolord(BaseModelClass):
                     )
                 elif layer_c in adata.layers:
                     logger.info(f"For modality #{(i+1)} using data from adata.layers[{layer_c!r}]")
-                    layer_fields.append(layer_c)
+                    layer_fields.append(f"layers_{layer_c}")
                     n_vars.append(adata.layers[layer_c].shape[1])
-                    layer_registries.append(LayerField(registry_key="layers", layer=layer_c, is_count_data=False))
+                    layer_registries.append(
+                        LayerField(registry_key=f"layers_{layer_c}", layer=layer_c, is_count_data=False)
+                    )
 
                 elif layer_c == "X":
                     logger.info(f"For modality #{(i+1)} using data from `adata.X`.")
@@ -469,7 +471,7 @@ class Biolord(BaseModelClass):
 
         Returns
         -------
-        Two :class:`~anndata.AnnData` objects representing the model's prediction of the expression mean and variance respectively.
+        Two dicts of :class:`~anndata.AnnData` objects representing the model's prediction of the expression mean and variance respectively per input modality
         """
         nullify_attribute = [] if nullify_attribute is None else nullify_attribute
         self.module.eval()
@@ -478,23 +480,27 @@ class Biolord(BaseModelClass):
         if indices is None:
             indices = np.arange(adata.n_obs)
         scdl = self._make_data_loader(adata=adata, indices=indices, batch_size=batch_size, shuffle=False)
-        mus = []
-        stds = []
+        mus = {key: [] for key in self.module.x_locs}
+        stds = {key: [] for key in self.module.x_locs}
         for tensors in scdl:
             _mus, _stds = self.module.get_expression(tensors, nullify_attribute=nullify_attribute)
-            _mus = _mus if _mus.ndim > 1 else _mus[None, :]
-            _stds = _stds if _stds.ndim > 1 else _stds[None, :]
-            mus.append(_mus.detach().cpu().numpy())
-            stds.append(_stds.detach().cpu().numpy())
+            for key in self.module.x_locs:
+                _mus_c = _mus[key] if _mus[key].ndim > 1 else _mus[key][None, :]
+                _stds_c = _stds[key] if _stds[key].ndim > 1 else _stds[key][None, :]
+                mus[key].append(_mus_c.detach().cpu().numpy())
+                stds[key].append(_stds_c.detach().cpu().numpy())
+        pred_adata_mean = {}
+        pred_adata_var = {}
+        for key in self.module.x_locs:
+            pred_adata_mean[key] = AnnData(X=np.concatenate(mus[key], axis=0), obs=adata.obs.copy())
+            pred_adata_var[key] = AnnData(X=np.concatenate(stds[key], axis=0), obs=adata.obs.copy())
 
-        pred_adata_mean = AnnData(X=np.concatenate(mus, axis=0), obs=adata.obs.copy())
-        pred_adata_var = AnnData(X=np.concatenate(stds, axis=0), obs=adata.obs.copy())
+            pred_adata_mean[key].obs_names = adata.obs_names
+            pred_adata_var[key].obs_names = adata.obs_names
 
-        pred_adata_mean.obs_names = adata.obs_names
-        pred_adata_var.obs_names = adata.obs_names
-
-        pred_adata_mean.var_names = adata.var_names
-        pred_adata_var.var_names = adata.var_names
+            if (key == "X") or (key in adata.layers.keys()):
+                pred_adata_mean[key].var_names = adata.var_names
+                pred_adata_var[key].var_names = adata.var_names
 
         return pred_adata_mean, pred_adata_var
 
@@ -858,35 +864,37 @@ class Biolord(BaseModelClass):
                 *[list(self.categorical_attributes_map[attribute_].keys()) for attribute_ in target_attributes]
             )
         )
-        layer = "X" if "X" in dataset_source else "layers"
-
         pred_original, _ = self.module.get_expression(dataset_source)
 
         classes_dataset = {}
         predictions_dict = {}
 
+        for modality_key in self.module.x_locs:
+            predictions_dict[modality_key] = {}
+
         for attribute_ in target_attributes:
             categories_index = pd.Index(adata.obs[attribute_].values, dtype="category")
             classes_dataset[attribute_] = {}
-            for key_, _ in tqdm(zip(*np.unique(categories_index.values, return_counts=True), strict=True)):
-                bool_category = categories_index.get_loc(key_)
+            for categories_key, _ in tqdm(zip(*np.unique(categories_index.values, return_counts=True), strict=True)):
+                bool_category = categories_index.get_loc(categories_key)
 
                 adata_cur = adata[bool_category, :].copy()
                 dataset = self.get_dataset(adata_cur)
+                classes_dataset[attribute_][categories_key] = dataset[attribute_][0, :]
 
-                classes_dataset[attribute_][key_] = dataset[attribute_][0, :]
-
-        for key_ in keys:
+        for target_key in keys:
             dataset_comb = {}
-            n_obs = dataset_source[layer].size(0)
+            n_obs = dataset_source[list(dataset_source.keys())[0]].size(0)
             for key_dataset in dataset_source:
                 dataset_comb[key_dataset] = dataset_source[key_dataset].to(self.device)
 
             for ci, attribute_ in enumerate(target_attributes):
-                dataset_comb[attribute_] = repeat_n(classes_dataset[attribute_][key_[ci]], n_obs)
+                dataset_comb[attribute_] = repeat_n(classes_dataset[attribute_][target_key[ci]], n_obs)
 
             pred, _ = self.module.get_expression(dataset_comb)
-            predictions_dict[key_] = pred
+
+            for modality_key in self.module.x_locs:
+                predictions_dict[modality_key][target_key] = pred[modality_key]
 
         return predictions_dict, pred_original
 
@@ -913,7 +921,7 @@ class Biolord(BaseModelClass):
 
         Returns
         -------
-        Annotated data object containing predictions of the cells in all combinations of the ``target_attributes``.
+        Dictionary of dictionaries of annotated data object containing predictions of the cells in all combinations of the ``target_attributes``.
         """
         dataset_source = self.get_dataset(adata_source)
 
@@ -921,40 +929,50 @@ class Biolord(BaseModelClass):
             adata=adata, dataset_source=dataset_source, target_attributes=target_attributes
         )
 
-        preds_ = np.concatenate([val.cpu() for key, val in predictions_dict.items()])
-        adata_preds = AnnData(X=preds_, dtype=preds_.dtype)
-        for attribute_ in target_attributes:
-            adata_preds.obs[attribute_] = "Source"
+        adata_preds_dict = {}
+        for pred_modality_key, pred_val in predictions_dict.items():
+            preds_ = np.concatenate([val.cpu() for key, val in pred_val.items()])
+            adata_preds_dict[pred_modality_key] = AnnData(X=preds_, dtype=preds_.dtype)
+            for attribute_ in target_attributes:
+                adata_preds_dict[pred_modality_key].obs[attribute_] = "Source"
 
-        start = 0
-        obs_names_tmp = adata_preds.obs_names.values
-        for key_, vals_ in predictions_dict.items():
-            for ci, _ in enumerate(target_attributes):
-                adata_preds.obs.iloc[start : start + vals_.shape[0], ci] = key_[ci]
-            obs_names_tmp[start : start + vals_.shape[0]] = [
-                obs_name + "_" + "_".join([str(k) for k in key_]) for obs_name in adata_source.obs_names
-            ]
-            start += vals_.shape[0]
+            start = 0
+            obs_names_tmp = adata_preds_dict[pred_modality_key].obs_names.values
+            for key_, vals_ in pred_val.items():
+                for ci, _ in enumerate(target_attributes):
+                    adata_preds_dict[pred_modality_key].obs.iloc[start : start + vals_.shape[0], ci] = key_[ci]
+                obs_names_tmp[start : start + vals_.shape[0]] = [
+                    obs_name + "_" + "_".join([str(k) for k in key_]) for obs_name in adata_source.obs_names
+                ]
+                start += vals_.shape[0]
 
-        adata_preds.obs_names = obs_names_tmp
-        for attribute_ in target_attributes:
-            adata_preds.obs[attribute_] = adata_preds.obs[attribute_].astype("category")
+            adata_preds_dict[pred_modality_key].obs_names = obs_names_tmp
+            for attribute_ in target_attributes:
+                adata_preds_dict[pred_modality_key].obs[attribute_] = (
+                    adata_preds_dict[pred_modality_key].obs[attribute_].astype("category")
+                )
 
-        if add_attributes is not None:
-            for attribute_ in add_attributes:
-                start = 0
-                adata_preds.obs[attribute_] = np.nan
-                for _ in range(int(adata_preds.shape[0] / adata_source.shape[0])):
-                    adata_preds.obs.iloc[start : start + adata_source.shape[0], -1] = adata_source.obs[attribute_]
-                    start += adata_source.shape[0]
+            if add_attributes is not None:
+                for attribute_ in add_attributes:
+                    start = 0
+                    adata_preds_dict[pred_modality_key].obs[attribute_] = np.nan
+                    for _ in range(int(adata_preds_dict[pred_modality_key].shape[0] / adata_source.shape[0])):
+                        adata_preds_dict[pred_modality_key].obs.iloc[
+                            start : start + adata_source.shape[0], -1
+                        ] = adata_source.obs[attribute_]
+                        start += adata_source.shape[0]
 
-                adata_preds.obs[attribute_] = adata_preds.obs[attribute_].astype(adata_source.obs[attribute_].dtype)
-                if f"{attribute_}_colors" in adata_source.uns:
-                    adata_preds.uns[f"{attribute_}_colors"] = adata_source.uns[f"{attribute_}_colors"]
+                    adata_preds_dict[pred_modality_key].obs[attribute_] = (
+                        adata_preds_dict[pred_modality_key].obs[attribute_].astype(adata_source.obs[attribute_].dtype)
+                    )
+                    if f"{attribute_}_colors" in adata_source.uns:
+                        adata_preds_dict[pred_modality_key].uns[f"{attribute_}_colors"] = adata_source.uns[
+                            f"{attribute_}_colors"
+                        ]
 
-        adata_preds.var_names = adata_source.var_names
+            adata_preds_dict[pred_modality_key].var_names = adata_source.var_names
 
-        return adata_preds
+        return adata_preds_dict
 
     def __repr__(self) -> str:
         buffer = io.StringIO()
