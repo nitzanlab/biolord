@@ -453,7 +453,7 @@ class Biolord(BaseModelClass):
         indices: Optional[Sequence[int]] = None,
         batch_size: Optional[int] = 512,
         nullify_attribute: Optional[list[str]] = None,
-    ) -> tuple[AnnData, AnnData]:
+    ) -> tuple[dict[str, AnnData], dict[str, AnnData]]:
         """The model's gene expression prediction for a given :class:`~anndata.AnnData` object.
 
         Parameters
@@ -902,7 +902,7 @@ class Biolord(BaseModelClass):
         adata_source: AnnData,
         target_attributes: list[str],
         add_attributes: Optional[list[str]] = None,
-    ) -> AnnData:
+    ) -> dict[tuple[Any], AnnData]:
         """Expression prediction over given inputs.
 
         Parameters
@@ -967,8 +967,8 @@ class Biolord(BaseModelClass):
                         adata_preds_dict[pred_modality_key].uns[f"{attribute_}_colors"] = adata_source.uns[
                             f"{attribute_}_colors"
                         ]
-
-            adata_preds_dict[pred_modality_key].var_names = adata_source.var_names
+            if pred_modality_key not in adata_source.obsm.keys():
+                adata_preds_dict[pred_modality_key].var_names = adata_source.var_names
 
         return adata_preds_dict
 
