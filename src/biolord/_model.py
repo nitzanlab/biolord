@@ -263,11 +263,11 @@ class Biolord(BaseModelClass):
             for i, layer_c in enumerate(layers):
                 if layer_c in adata.obsm:
                     logger.info(f"For modality #{(i+1)} using multi data from adata.obsm[{layer_c!r}]")
-                    layer_fields.append(f"obsm_{layer_c}")
+                    layer_fields.append(layer_c)
                     n_vars.append(adata.obsm[layer_c].shape[1])
                     layer_registries.append(
                         ObsmField(
-                            f"obsm_{layer_c}",
+                            layer_c,
                             layer_c,
                             is_count_data=False,
                             correct_data_format=True,
@@ -275,11 +275,9 @@ class Biolord(BaseModelClass):
                     )
                 elif layer_c in adata.layers:
                     logger.info(f"For modality #{(i+1)} using data from adata.layers[{layer_c!r}]")
-                    layer_fields.append(f"layers_{layer_c}")
+                    layer_fields.append(layer_c)
                     n_vars.append(adata.layers[layer_c].shape[1])
-                    layer_registries.append(
-                        LayerField(registry_key=f"layers_{layer_c}", layer=layer_c, is_count_data=False)
-                    )
+                    layer_registries.append(LayerField(registry_key=layer_c, layer=layer_c, is_count_data=False))
 
                 elif layer_c == "X":
                     logger.info(f"For modality #{(i+1)} using data from `adata.X`.")

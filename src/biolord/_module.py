@@ -6,167 +6,15 @@ from scvi import REGISTRY_KEYS, settings
 from scvi.distributions import NegativeBinomial, Poisson
 from scvi.module import Classifier
 from scvi.module.base import BaseModuleClass, auto_move_data
-from scvi.nn import Decoder, FCLayers
+from scvi.nn import Decoder, DecoderSCVI, FCLayers
 from sklearn.metrics import mean_squared_error, r2_score
 from torch import nn
 from torch.distributions import Categorical, Normal
 
+from ._base_components import DistributionDecoderWrapper, NormalDecoderWrapper, RegularizedEmbedding
 from ._constants import LOSS_KEYS
 
-__all__ = ["RegularizedEmbedding", "BiolordModule", "BiolordClassifyModule"]
-
-
-# Decoder
-class DistributionDecoderWrapper(nn.Module):
-    """Decodes data from latent space of ``n_hidden`` dimensions into ``n_output`` dimensions.
-
-    Parameters
-    ----------
-    n_output
-        The dimensionality of the output (data space)
-    n_hidden
-        The number of nodes per hidden layer
-    scale_activation
-        Activation layer to use for px_scale_decoder
-    """
-
-    def __init__(
-        self,
-        n_output: int,
-        n_hidden: int = 128,
-        scale_activation: Literal["softmax", "softplus"] = "softmax",
-    ):
-        super().__init__()
-
-        # mean gamma
-        if scale_activation == "softmax":
-            px_scale_activation = nn.Softmax(dim=-1)
-        elif scale_activation == "softplus":
-            px_scale_activation = nn.Softplus()
-
-        self.px_scale_decoder = nn.Sequential(
-            nn.Linear(n_hidden, n_output),
-            px_scale_activation,
-        )
-
-        # dispersion: here we only deal with gene-cell dispersion case
-        self.px_r_decoder = nn.Linear(n_hidden, n_output)
-
-        # dropout
-        self.px_dropout_decoder = nn.Linear(n_hidden, n_output)
-
-    def forward(self, dispersion: str, p: torch.Tensor, library: torch.Tensor):
-        """The forward computation for a single sample.
-
-         #. Decodes the data from the latent space using the decoder network
-         #. Returns parameters for the ZINB distribution of expression
-         #. If ``dispersion != 'gene-cell'`` then value for that param will be ``None``
-
-        Parameters
-        ----------
-        dispersion
-            One of the following
-
-            * ``'gene'`` - dispersion parameter of NB is constant per gene across cells
-            * ``'gene-batch'`` - dispersion can differ between different batches
-            * ``'gene-label'`` - dispersion can differ between different labels
-            * ``'gene-cell'`` - dispersion can differ for every gene in every cell
-        p :
-            tensor with shape ``(n_hidden,)``
-        library
-            library size
-
-        Returns
-        -------
-        4-tuple of :py:class:`torch.Tensor`
-            parameters for the ZINB distribution of expression
-
-        """
-        # The decoder returns values for the parameters of the ZINB distribution
-        px_scale = self.px_scale_decoder(p)
-        px_dropout = self.px_dropout_decoder(p)
-        px_rate = torch.exp(library) * px_scale
-        px_r = self.px_r_decoder(p) if dispersion == "gene-cell" else None
-        return px_scale, px_r, px_rate, px_dropout
-
-
-class NormalDecoderWrapper(nn.Module):
-    """Decodes data from hidden space to data space.
-
-    ``n_hidden`` dimensions to ``n_output``
-    dimensions using a fully-connected neural network of ``n_hidden`` layers.
-    Output pear feature is according to defined distribution:
-    "normal": mean, variance
-
-    Parameters
-    ----------
-    n_output
-        The dimensionality of the output (data space)
-    n_hidden
-        The number of nodes per hidden layer
-    """
-
-    def __init__(
-        self,
-        n_output: int,
-        n_hidden: int = 128,
-    ):
-        super().__init__()
-
-        self.mean_decoder = nn.Linear(n_hidden, n_output)
-        self.var_decoder = nn.Linear(n_hidden, n_output)
-
-    def forward(self, p: torch.Tensor):
-        """The forward computation for a single sample.
-
-         #. Decodes the data from the latent space using the decoder network
-         #. Returns tensors for the mean and variance of a multivariate distribution
-
-        Parameters
-        ----------
-        p
-            tensor with shape ``(n_hidden,)``
-
-        Returns
-        -------
-        2-tuple of :py:class:`torch.Tensor`
-            Mean and variance tensors of shape ``(n_output,)``
-
-        """
-        # Parameters for latent distribution
-        p_m = self.mean_decoder(p)
-        p_v = torch.exp(self.var_decoder(p))
-        return p_m, p_v
-
-
-class RegularizedEmbedding(nn.Module):
-    """Regularized embedding module."""
-
-    def __init__(
-        self,
-        n_input: int,
-        n_output: int,
-        sigma: float,
-        embed: bool = True,
-    ):
-        super().__init__()
-        self.embedding = nn.Embedding(
-            num_embeddings=n_input,
-            embedding_dim=n_output,
-        )
-        self.sigma = sigma if embed else 0
-        self.embed = embed
-
-    def forward(self, x):
-        """Forward pass."""
-        x_ = self.embedding(x)
-        if self.training and self.sigma != 0:
-            noise = torch.zeros_like(x_)
-            noise.normal_(mean=0, std=self.sigma)
-
-            x_ = x_ + noise
-        x_ = x_ * self.embed
-        return x_
+__all__ = ["BiolordModule", "BiolordClassifyModule"]
 
 
 class BiolordModule(BaseModuleClass):
@@ -211,6 +59,8 @@ class BiolordModule(BaseModuleClass):
         Ordered attributes autoencoder number of layers.
     attribute_nn_activation
         Use activation in ordered attributes.
+    multi_decoder
+        Define a multi-decoder model, a full decoder per modality.
     decoder_width
         Decoder layers' width.
     decoder_depth
@@ -244,6 +94,7 @@ class BiolordModule(BaseModuleClass):
         unknown_attribute_noise_param: float = 1e-1,
         unknown_attributes: bool = True,
         attribute_dropout_rate: dict[str, float] = None,
+        multi_decoder: bool = True,
         decoder_width: int = 512,
         decoder_depth: int = 4,
         decoder_activation: bool = True,
@@ -370,29 +221,49 @@ class BiolordModule(BaseModuleClass):
             self.categorical_embeddings[attribute_] = self.categorical_embeddings[attribute_.split("_rep")[0]]
 
         # Decoders components
-        self.joint_decoder = FCLayers(
-            n_in=self.n_decoder_input,
-            n_out=decoder_width,
-            n_layers=decoder_depth,
-            n_hidden=decoder_width,
-            dropout_rate=0,
-            use_batch_norm=use_batch_norm,
-            use_layer_norm=use_layer_norm,
-            use_activation=decoder_activation,
-        )
-
         self.decoders = nn.ModuleDict()
         self.px_r = {}
+        if multi_decoder:
+            self.joint_decoder = nn.Identity()
+            DistributionDecoder = DecoderSCVI
+            NormalDecoder = Decoder
+        else:
+            self.joint_decoder = FCLayers(
+                n_in=self.n_decoder_input,
+                n_out=decoder_width,
+                n_layers=decoder_depth,
+                n_hidden=decoder_width,
+                dropout_rate=0,
+                use_batch_norm=use_batch_norm,
+                use_layer_norm=use_layer_norm,
+                use_activation=decoder_activation,
+            )
+            DistributionDecoder = DistributionDecoderWrapper
+            NormalDecoder = NormalDecoderWrapper
+
         for gene_likelihood, x_loc_, n_var in zip(gene_likelihoods, x_locs, n_vars):
             if gene_likelihood in ["nb", "poisson"]:
-                self.decoders[x_loc_] = DistributionDecoderWrapper(
+                self.decoders[x_loc_] = DistributionDecoder(
+                    n_input=self.n_decoder_input,
                     n_output=n_var,
                     n_hidden=decoder_width,
+                    n_layers=decoder_depth,
+                    use_batch_norm=use_batch_norm,
+                    use_layer_norm=use_layer_norm,
                     scale_activation="softmax",
                 )
+
                 self.px_r[x_loc_] = torch.nn.Parameter(torch.randn(n_var))
             else:
-                self.decoders[x_loc_] = NormalDecoderWrapper(n_output=n_var, n_hidden=decoder_width)
+                self.decoders[x_loc_] = NormalDecoder(
+                    n_input=self.n_decoder_input,
+                    n_output=n_var,
+                    n_hidden=decoder_width,
+                    n_layers=decoder_depth,
+                    use_batch_norm=use_batch_norm,
+                    use_layer_norm=use_layer_norm,
+                    use_activation=decoder_activation,
+                )
 
     def _get_inference_input(self, tensors: dict[Any, Any], **kwargs):
         sample_indices = tensors[REGISTRY_KEYS.INDICES_KEY].long().ravel()
@@ -556,12 +427,12 @@ class BiolordModule(BaseModuleClass):
         Dictionary with the generative predictions of the expression distribution.
         """
         gen_dict = {}
-        p = self.joint_decoder(latent)
+        z = self.joint_decoder(latent)
         for i, x_loc_ in enumerate(self.x_locs):
             if self.gene_likelihoods[i] in ["nb", "poisson"]:
                 px_scale, _, px_rate, _ = self.decoders[x_loc_](
                     dispersion="gene",
-                    p=p,
+                    z=z,
                     library=library[x_loc_],
                 )
                 px_r = torch.exp(self.px_r[x_loc_])
@@ -579,7 +450,7 @@ class BiolordModule(BaseModuleClass):
                 }
 
             else:
-                p_m, p_v = self.decoders[x_loc_](p=p)
+                p_m, p_v = self.decoders[x_loc_](x=z)
                 px = Normal(loc=p_m, scale=p_v.sqrt())
                 gen_dict[x_loc_] = {
                     "means": px.loc,
