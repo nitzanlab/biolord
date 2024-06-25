@@ -841,6 +841,7 @@ class Biolord(BaseModelClass):
         adata,
         dataset_source,
         target_attributes,
+        ordered_attributes: Optional[dict] = None,
     ) -> tuple[dict[tuple[Any], Any], Any]:
         """Expression prediction over given inputs.
 
@@ -852,16 +853,22 @@ class Biolord(BaseModelClass):
             Dataset of cells to "shift", make predictions over.
         target_attributes
             Attributes to make predictions over.
+        ordered_attributes
+            Ordered attributes to make predictions over, requires a dict of dicts:
+            {"attribute_name": {"key_a": value_a, "key_b": value_b}}.
+            value_x should be in the expected format of "attribute_name",
 
         Returns
         -------
         The prediction dict for each attribute value and the original expression prediction.
         """
-        keys = list(
-            itertools.product(
-                *[list(self.categorical_attributes_map[attribute_].keys()) for attribute_ in target_attributes]
-            )
-        )
+        target_attributes_full = target_attributes.copy()
+        prod_list = [list(self.categorical_attributes_map[attribute_].keys()) for attribute_ in target_attributes]
+        if ordered_attributes is not None:
+            prod_list += [list(ordered_attributes[attribute_].keys()) for attribute_ in ordered_attributes.keys()]
+            target_attributes_full += list(ordered_attributes.keys())
+        keys = list(itertools.product(*prod_list))
+
         pred_original, _ = self.module.get_expression(dataset_source)
 
         classes_dataset = {}
@@ -880,13 +887,21 @@ class Biolord(BaseModelClass):
                 dataset = self.get_dataset(adata_cur)
                 classes_dataset[attribute_][categories_key] = dataset[attribute_][0, :]
 
+        if ordered_attributes is not None:
+            dataset_full = self.get_dataset(adata)
+            for attribute_, dict_ in ordered_attributes.items():
+                classes_dataset[attribute_] = {}
+                for key_, value_ in dict_.items():
+                    dataset_full[attribute_][0, :] = torch.tensor(value_, dtype=dataset_full[attribute_].dtype)
+                    classes_dataset[attribute_][key_] = dataset_full[attribute_][0, :]
+
         for target_key in keys:
             dataset_comb = {}
             n_obs = dataset_source[list(dataset_source.keys())[0]].size(0)
             for key_dataset in dataset_source:
                 dataset_comb[key_dataset] = dataset_source[key_dataset].to(self.device)
 
-            for ci, attribute_ in enumerate(target_attributes):
+            for ci, attribute_ in enumerate(target_attributes_full):
                 dataset_comb[attribute_] = repeat_n(classes_dataset[attribute_][target_key[ci]], n_obs)
 
             pred, _ = self.module.get_expression(dataset_comb)
@@ -901,6 +916,7 @@ class Biolord(BaseModelClass):
         adata: AnnData,
         adata_source: AnnData,
         target_attributes: list[str],
+        ordered_attributes: Optional[dict] = None,
         add_attributes: Optional[list[str]] = None,
     ) -> dict[tuple[Any], AnnData]:
         """Expression prediction over given inputs.
@@ -913,6 +929,10 @@ class Biolord(BaseModelClass):
             Annotated data object we wish to make predictions over, e.g., change their ``target_attributes``.
         target_attributes
             Attributes to make predictions over.
+        ordered_attributes
+            Ordered attributes to make predictions over, requires a dict of dicts:
+            {"attribute_name": {"key_a": value_a, "key_b": value_b}}.
+            value_x should be in the expected format of "attribute_name",
         add_attributes
             Additional attributes to add to :attr:`anndata.AnnData.obs` from the original adata
             to the  prediction adata object.
@@ -924,20 +944,26 @@ class Biolord(BaseModelClass):
         dataset_source = self.get_dataset(adata_source)
 
         predictions_dict, _ = self._compute_prediction(
-            adata=adata, dataset_source=dataset_source, target_attributes=target_attributes
+            adata=adata,
+            dataset_source=dataset_source,
+            target_attributes=target_attributes,
+            ordered_attributes=ordered_attributes,
         )
+        target_attributes_full = target_attributes.copy()
+        if ordered_attributes is not None:
+            target_attributes_full += list(ordered_attributes.keys())
 
         adata_preds_dict = {}
         for pred_modality_key, pred_val in predictions_dict.items():
             preds_ = np.concatenate([val.cpu() for key, val in pred_val.items()])
             adata_preds_dict[pred_modality_key] = AnnData(X=preds_, dtype=preds_.dtype)
-            for attribute_ in target_attributes:
+            for attribute_ in target_attributes_full:
                 adata_preds_dict[pred_modality_key].obs[attribute_] = "Source"
 
             start = 0
             obs_names_tmp = adata_preds_dict[pred_modality_key].obs_names.values
             for key_, vals_ in pred_val.items():
-                for ci, _ in enumerate(target_attributes):
+                for ci, _ in enumerate(target_attributes_full):
                     adata_preds_dict[pred_modality_key].obs.iloc[start : start + vals_.shape[0], ci] = key_[ci]
                 obs_names_tmp[start : start + vals_.shape[0]] = [
                     obs_name + "_" + "_".join([str(k) for k in key_]) for obs_name in adata_source.obs_names
@@ -945,7 +971,7 @@ class Biolord(BaseModelClass):
                 start += vals_.shape[0]
 
             adata_preds_dict[pred_modality_key].obs_names = obs_names_tmp
-            for attribute_ in target_attributes:
+            for attribute_ in target_attributes_full:
                 adata_preds_dict[pred_modality_key].obs[attribute_] = (
                     adata_preds_dict[pred_modality_key].obs[attribute_].astype("category")
                 )
