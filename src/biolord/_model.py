@@ -840,7 +840,7 @@ class Biolord(BaseModelClass):
         self,
         adata,
         dataset_source,
-        target_attributes,
+        target_attributes: Optional[list] = None,
         ordered_attributes: Optional[dict] = None,
     ) -> tuple[dict[tuple[Any], Any], Any]:
         """Expression prediction over given inputs.
@@ -862,8 +862,13 @@ class Biolord(BaseModelClass):
         -------
         The prediction dict for each attribute value and the original expression prediction.
         """
-        target_attributes_full = target_attributes.copy()
-        prod_list = [list(self.categorical_attributes_map[attribute_].keys()) for attribute_ in target_attributes]
+        if target_attributes is None and ordered_attributes is None:
+            raise ValueError("No attributes passed")
+        if target_attributes is not None:
+            target_attributes_full = target_attributes.copy()
+            prod_list = [list(self.categorical_attributes_map[attribute_].keys()) for attribute_ in target_attributes]
+        else:
+            target_attributes_full, prod_list = [], []
         if ordered_attributes is not None:
             prod_list += [list(ordered_attributes[attribute_].keys()) for attribute_ in ordered_attributes.keys()]
             target_attributes_full += list(ordered_attributes.keys())
@@ -877,15 +882,18 @@ class Biolord(BaseModelClass):
         for modality_key in self.module.x_locs:
             predictions_dict[modality_key] = {}
 
-        for attribute_ in target_attributes:
-            categories_index = pd.Index(adata.obs[attribute_].values, dtype="category")
-            classes_dataset[attribute_] = {}
-            for categories_key, _ in tqdm(zip(*np.unique(categories_index.values, return_counts=True), strict=True)):
-                bool_category = categories_index.get_loc(categories_key)
+        if target_attributes is not None:
+            for attribute_ in target_attributes:
+                categories_index = pd.Index(adata.obs[attribute_].values, dtype="category")
+                classes_dataset[attribute_] = {}
+                for categories_key, _ in tqdm(
+                    zip(*np.unique(categories_index.values, return_counts=True), strict=True)
+                ):
+                    bool_category = categories_index.get_loc(categories_key)
 
-                adata_cur = adata[bool_category, :].copy()
-                dataset = self.get_dataset(adata_cur)
-                classes_dataset[attribute_][categories_key] = dataset[attribute_][0, :]
+                    adata_cur = adata[bool_category, :].copy()
+                    dataset = self.get_dataset(adata_cur)
+                    classes_dataset[attribute_][categories_key] = dataset[attribute_][0, :]
 
         if ordered_attributes is not None:
             dataset_full = self.get_dataset(adata)
@@ -893,7 +901,7 @@ class Biolord(BaseModelClass):
                 classes_dataset[attribute_] = {}
                 for key_, value_ in dict_.items():
                     dataset_full[attribute_][0, :] = torch.tensor(value_, dtype=dataset_full[attribute_].dtype)
-                    classes_dataset[attribute_][key_] = dataset_full[attribute_][0, :]
+                    classes_dataset[attribute_][key_] = torch.clone(dataset_full[attribute_][0, :])
 
         for target_key in keys:
             dataset_comb = {}
@@ -949,7 +957,9 @@ class Biolord(BaseModelClass):
             target_attributes=target_attributes,
             ordered_attributes=ordered_attributes,
         )
-        target_attributes_full = target_attributes.copy()
+
+        target_attributes_full = target_attributes.copy() if target_attributes is not None else []
+
         if ordered_attributes is not None:
             target_attributes_full += list(ordered_attributes.keys())
 
