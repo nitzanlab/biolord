@@ -837,7 +837,7 @@ class Biolord(BaseModelClass):
         for attribute_ in target_attributes:
             categories_index = pd.Index(adata.obs[attribute_].values, dtype="category")
             classes_dataset[attribute_] = {}
-            for key_, _ in tqdm(zip(*np.unique(categories_index.values, return_counts=True), strict=True)):
+            for key_, _ in tqdm(zip(*np.unique(categories_index.values, return_counts=True))):
                 bool_category = categories_index.get_loc(key_)
 
                 adata_cur = adata[bool_category, :].copy()
