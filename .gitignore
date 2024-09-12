@@ -39,6 +39,7 @@ MANIFEST
 /.pytest_cache/
 /.cache/
 /data/
+/node_modules/
 
 # docs
 /docs/generated/
