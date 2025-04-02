@@ -1,30 +1,32 @@
-{{ fullname | escape | underline }}
+{{ fullname | escape | underline}}
 
 .. currentmodule:: {{ module }}
+
+.. add toctree option to make autodoc generate the pages
 
 .. autoclass:: {{ objname }}
 
 {% block attributes %}
 {% if attributes %}
-{{ 'Attributes table' | underline(line='-') }}
+Attributes table
+~~~~~~~~~~~~~~~~
 
 .. autosummary::
 {% for item in attributes %}
-{%- if item not in inherited_members and item not in ['training'] %}
-    ~{{ fullname }}.{{ item }}
-{%- endif %}
+    ~{{ name }}.{{ item }}
 {%- endfor %}
 {% endif %}
 {% endblock %}
 
 {% block methods %}
 {% if methods %}
-{{ 'Methods table' | underline(line='-') }}
+Methods table
+~~~~~~~~~~~~~
 
 .. autosummary::
 {% for item in methods %}
-    {%- if item != '__init__' and item not in inherited_members %}
-    ~{{ fullname }}.{{ item }}
+    {%- if item != '__init__' %}
+    ~{{ name }}.{{ item }}
     {%- endif -%}
 {%- endfor %}
 {% endif %}
@@ -32,14 +34,12 @@
 
 {% block attributes_documentation %}
 {% if attributes %}
-{{ 'Attributes' | underline(line='-') }}
-{% for item in attributes %}
-{%- if item not in inherited_members and item not in ['training'] %}
+Attributes
+~~~~~~~~~~
 
-{{ item | escape | underline(line='^') }}
+{% for item in attributes %}
 
 .. autoattribute:: {{ [objname, item] | join(".") }}
-{%- endif %}
 {%- endfor %}
 
 {% endif %}
@@ -47,11 +47,11 @@
 
 {% block methods_documentation %}
 {% if methods %}
-{{ 'Methods' | underline(line='-') }}
-{% for item in methods %}
-{%- if item != '__init__' and item not in inherited_members %}
+Methods
+~~~~~~~
 
-{{ item | escape | underline(line='^') }}
+{% for item in methods %}
+{%- if item != '__init__' %}
 
 .. automethod:: {{ [objname, item] | join(".") }}
 {%- endif -%}
